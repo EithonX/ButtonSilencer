@@ -104,7 +104,7 @@
 
                     <TextView
                         android:id="@+id/protectionStatusDetail"
-                        style="@style/Text.Body"
+                        style="@style/TextBody"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp" />
@@ -123,7 +123,7 @@
 
             <Button
                 android:id="@+id/reconnectShizukuButton"
-                style="@style/Widget.PrimaryButton"
+                style="@style/WidgetPrimaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -140,7 +140,7 @@
             android:padding="18dp">
 
             <TextView
-                style="@style/Text.SectionTitle"
+                style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/headset_device_title" />
@@ -164,7 +164,7 @@
                 android:textSize="12sp" />
 
             <TextView
-                style="@style/Text.Body"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
@@ -178,7 +178,7 @@
 
                 <Button
                     android:id="@+id/scanDevicesButton"
-                    style="@style/Widget.PrimaryButton"
+                    style="@style/WidgetPrimaryButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -186,7 +186,7 @@
 
                 <Button
                     android:id="@+id/forgetDeviceButton"
-                    style="@style/Widget.SecondaryButton"
+                    style="@style/WidgetSecondaryButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
@@ -222,7 +222,7 @@
             android:visibility="gone">
 
             <TextView
-                style="@style/Text.SectionTitle"
+                style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/privileged_routes_title" />
@@ -243,7 +243,7 @@
                 android:text="@string/volume_guard_switch" />
 
             <TextView
-                style="@style/Text.Body"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
@@ -257,14 +257,14 @@
                 android:background="@color/divider" />
 
             <TextView
-                style="@style/Text.SectionTitle"
+                style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/accessibility_fallback_title" />
 
             <TextView
                 android:id="@+id/accessibilityStatus"
-                style="@style/Text.Body"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp" />
@@ -313,7 +313,7 @@
 
                 <Button
                     android:id="@+id/openAccessibilityButton"
-                    style="@style/Widget.SecondaryButton"
+                    style="@style/WidgetSecondaryButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -321,7 +321,7 @@
 
                 <Button
                     android:id="@+id/openAppInfoButton"
-                    style="@style/Widget.SecondaryButton"
+                    style="@style/WidgetSecondaryButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
@@ -337,7 +337,7 @@
                 android:background="@color/divider" />
 
             <TextView
-                style="@style/Text.SectionTitle"
+                style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/diagnostics_title" />
@@ -351,7 +351,7 @@
                 android:text="@string/diagnostic_logging" />
 
             <TextView
-                style="@style/Text.Body"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/diagnostic_logging_help" />
@@ -364,7 +364,7 @@
 
                 <Button
                     android:id="@+id/refreshDiagnosticsButton"
-                    style="@style/Widget.SecondaryButton"
+                    style="@style/WidgetSecondaryButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -372,7 +372,7 @@
 
                 <Button
                     android:id="@+id/clearDiagnosticsButton"
-                    style="@style/Widget.SecondaryButton"
+                    style="@style/WidgetSecondaryButton"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
@@ -422,13 +422,13 @@
             android:visibility="gone">
 
             <TextView
-                style="@style/Text.SectionTitle"
+                style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/about_title" />
 
             <TextView
-                style="@style/Text.Body"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -453,14 +453,14 @@
 
             <Button
                 android:id="@+id/githubButton"
-                style="@style/Widget.PrimaryButton"
+                style="@style/WidgetPrimaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="@string/open_developer_github" />
 
             <TextView
-                style="@style/Text.Body"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -468,7 +468,7 @@
         </LinearLayout>
 
         <TextView
-            style="@style/Text.Body"
+            style="@style/TextBody"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"

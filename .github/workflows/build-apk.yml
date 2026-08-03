@@ -51,18 +51,20 @@ jobs:
         shell: bash
         run: >-
           gradle --no-daemon --stacktrace
-          -PversionCode=$((300000 + GITHUB_RUN_NUMBER))
+          -PversionCode=$((301000 + GITHUB_RUN_NUMBER))
           clean
           :app:processDebugMainManifest
           :app:processReleaseMainManifest
           :app:compileDebugAidl
           :app:compileReleaseAidl
+          :app:processDebugResources
+          :app:processReleaseResources
 
       - name: Run unit tests and lint
         shell: bash
         run: >-
           gradle --no-daemon --stacktrace
-          -PversionCode=$((300000 + GITHUB_RUN_NUMBER))
+          -PversionCode=$((301000 + GITHUB_RUN_NUMBER))
           testDebugUnitTest
           lintDebug
           lintRelease
@@ -71,7 +73,7 @@ jobs:
         shell: bash
         run: >-
           gradle --no-daemon --stacktrace
-          -PversionCode=$((300000 + GITHUB_RUN_NUMBER))
+          -PversionCode=$((301000 + GITHUB_RUN_NUMBER))
           assembleDebug
           assembleRelease
 

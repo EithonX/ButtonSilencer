@@ -107,6 +107,23 @@ for path in (app / 'src/main/java').rglob('*.java'):
 if missing:
     raise SystemExit('Missing resources:\n' + '\n'.join(missing))
 
+# Android infers a parent from dotted style names when parent is omitted.
+# Catch missing inferred parents before AAPT2 resource linking.
+style_names = resources.get('style', set())
+for path in sorted(res_root.glob('values*/**/*.xml')):
+    tree = ET.parse(path)
+    for child in tree.getroot():
+        if child.tag != 'style':
+            continue
+        name = child.attrib.get('name', '')
+        if '.' in name and 'parent' not in child.attrib:
+            inferred_parent = name.rsplit('.', 1)[0]
+            if inferred_parent not in style_names:
+                raise SystemExit(
+                    f'Missing inferred style parent: {path}: style {name!r} requires '
+                    f'@style/{inferred_parent}; add an explicit parent or rename the style'
+                )
+
 service = service_path.read_text(encoding='utf-8')
 for required_text in (
     'initializeMediaFrameworkIfNeeded();',

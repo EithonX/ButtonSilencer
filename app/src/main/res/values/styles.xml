@@ -12,26 +12,26 @@
         <item name="android:textColorSecondary">@color/text_secondary</item>
     </style>
 
-    <style name="Text.SectionTitle">
+    <style name="TextSectionTitle">
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textSize">17sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Text.Body">
+    <style name="TextBody">
         <item name="android:textColor">@color/text_secondary</item>
         <item name="android:textSize">14sp</item>
         <item name="android:lineSpacingExtra">2dp</item>
     </style>
 
-    <style name="Widget.PrimaryButton" parent="android:style/Widget.Material.Button">
+    <style name="WidgetPrimaryButton" parent="android:style/Widget.Material.Button">
         <item name="android:backgroundTint">@color/primary</item>
         <item name="android:textColor">@color/on_primary</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:minHeight">48dp</item>
     </style>
 
-    <style name="Widget.SecondaryButton" parent="android:style/Widget.Material.Button">
+    <style name="WidgetSecondaryButton" parent="android:style/Widget.Material.Button">
         <item name="android:backgroundTint">@color/surface_variant</item>
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textAllCaps">false</item>

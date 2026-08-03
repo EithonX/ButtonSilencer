@@ -5,12 +5,19 @@
     <string name="accessibility_service_description">Blocks selected headset, media, call, assistant, and external volume key events while Android delivers them to Accessibility. It does not read screen contents or typed text.</string>
 
     <string name="title">Button Silencer</string>
-    <string name="subtitle">Hybrid blocking: Shizuku handles privileged media keys before media apps, while Accessibility remains available for screen-on and volume-key filtering. No USB interface claiming.</string>
+    <string name="subtitle">Hybrid blocking: Shizuku handles media keys and a selected headset input device while Accessibility remains available for screen-on filtering. The phone’s own volume buttons remain untouched. No USB interface claiming.</string>
     <string name="shizuku_title">Screen-off privileged media blocking</string>
     <string name="privileged_media_blocking">Enable Shizuku media-key listener</string>
     <string name="reconnect_shizuku">Request permission / reconnect Shizuku</string>
     <string name="shizuku_enable_hint">Keep Shizuku running. Reopen this app after Shizuku or the phone restarts.</string>
-    <string name="shizuku_limitations">This privileged route blocks HEADSETHOOK and Android media keys before normal media sessions, including with the screen off. It does not intercept ordinary volume-up/down presses.</string>
+    <string name="shizuku_limitations">Media buttons are consumed before normal media sessions. For headset volume buttons, scan and select the headset’s own input device. The volume guard restores media volume after events from only that device; it does not intercept the phone’s side buttons.</string>
+    <string name="headset_volume_title">Screen-off headset volume guard</string>
+    <string name="headset_volume_switch">Neutralize volume presses from selected headset</string>
+    <string name="scan_volume_devices">Scan volume-key input devices</string>
+    <string name="headset_device_prompt">Select the headset input device</string>
+    <string name="headset_volume_help">Choose the USB/IEM/headset device, not gpio-keys or another entry marked as likely phone buttons. The guard is read-only and may briefly show the volume overlay while restoring the previous media volume.</string>
+    <string name="no_volume_devices">No volume-key input devices found. Connect the headset, keep Shizuku running, then scan again.</string>
+    <string name="connect_before_scan">Connect Shizuku before scanning.</string>
 
     <string name="status_title">Accessibility fallback status</string>
     <string name="open_accessibility">Open Accessibility settings</string>

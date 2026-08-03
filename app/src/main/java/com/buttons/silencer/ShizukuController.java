@@ -49,7 +49,7 @@ final class ShizukuController {
                 new ComponentName(this.context, PrivilegedMediaKeyService.class)
         )
                 .daemon(true)
-                .tag("button-silencer-media-key-v2")
+                .tag("button-silencer-privileged-v3")
                 .processNameSuffix("media_key")
                 .debuggable(BuildConfig.DEBUG)
                 .version(BuildConfig.VERSION_CODE);
@@ -103,6 +103,46 @@ final class ShizukuController {
             requestPermissionOrConnect();
         } else {
             stopPrivilegedService();
+        }
+    }
+
+
+    String[] listVolumeInputDevices() {
+        IPrivilegedBlocker current = remote;
+        if (current == null) {
+            localStatus = "Connect Shizuku before scanning input devices";
+            return new String[0];
+        }
+        try {
+            return current.listVolumeInputDevices();
+        } catch (RemoteException e) {
+            remote = null;
+            localStatus = "Input-device scan failed: " + concise(e);
+            return new String[0];
+        }
+    }
+
+    void setHeadsetVolumeGuard(String encodedDevice, boolean enabled) {
+        Preferences.putString(context, Preferences.KEY_HEADSET_VOLUME_DEVICE, encodedDevice);
+        Preferences.putBoolean(context, Preferences.KEY_HEADSET_VOLUME_GUARD, enabled);
+
+        if (enabled && remote == null) {
+            requestPermissionOrConnect();
+            return;
+        }
+
+        IPrivilegedBlocker current = remote;
+        if (current == null) {
+            return;
+        }
+        try {
+            boolean active = current.setHeadsetVolumeGuard(encodedDevice, enabled);
+            localStatus = active
+                    ? "Headset volume guard active"
+                    : (enabled ? "Headset volume guard could not start" : "Headset volume guard off");
+        } catch (RemoteException e) {
+            remote = null;
+            localStatus = "Headset volume guard failed: " + concise(e);
         }
     }
 
@@ -194,6 +234,7 @@ final class ShizukuController {
         IPrivilegedBlocker current = remote;
         if (current != null) {
             try {
+                current.setHeadsetVolumeGuard("", false);
                 current.setEnabled(false);
             } catch (RemoteException e) {
                 localStatus = "Could not disable privileged blocker: " + concise(e);
@@ -222,9 +263,16 @@ final class ShizukuController {
         boolean desired = Preferences.privilegedMediaEnabled(context);
         try {
             boolean active = current.setEnabled(desired);
+            boolean volumeActive = current.setHeadsetVolumeGuard(
+                    Preferences.headsetVolumeDevice(context),
+                    Preferences.headsetVolumeGuardEnabled(context)
+            );
             localStatus = active
                     ? "Privileged media-key listener active"
                     : "Privileged listener connected but inactive";
+            if (Preferences.headsetVolumeGuardEnabled(context) && !volumeActive) {
+                localStatus += "; headset volume guard needs attention";
+            }
         } catch (RemoteException e) {
             remote = null;
             localStatus = "Privileged service failed: " + concise(e);

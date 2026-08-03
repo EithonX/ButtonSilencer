@@ -1,64 +1,56 @@
-# Button Silencer — Shizuku privileged media-key build v2.3
+# Button Silencer v2.4 — media-key blocker + selected-headset volume guard
 
-This revision replaces the unreliable screen-off Accessibility-only design with Android's privileged media-key listener through a Shizuku UserService.
+This build keeps the working Shizuku privileged media-key listener from v2.3 and adds a screen-off volume guard that targets only one explicitly selected headset input device.
 
-## Why this route
+## What it does
 
-Android's hidden `MediaSessionManager.setOnMediaKeyListener()` receives media keys before normal media sessions. If the listener returns `true`, the event is consumed. The permission is privileged, but Android's shell package holds it, so a Shizuku UserService running as shell can register the listener without claiming the USB interface.
+- Consumes `HEADSETHOOK` and Android `MEDIA_*` events before ordinary media sessions, including while the screen is off.
+- Uses Shizuku's shell process to run Android's read-only `getevent` tool against the selected headset input node.
+- When that selected device reports `VOLUME_UP` or `VOLUME_DOWN`, immediately restores the previous media-volume level.
+- Leaves the phone's own side-volume buttons alone because events from other input devices are ignored.
+- Keeps the Accessibility Service for screen-on filtering and diagnostics.
 
 ## Safety profile
 
-- No USB device/interface ownership.
-- No raw USB transfers.
-- No root requirement; normal Shizuku ADB mode is sufficient on Android builds where shell has `SET_MEDIA_KEY_LISTENER`.
-- No foreground service, silent audio, wake lock, network permission, background polling, or media-session playback takeover. The status panel refreshes only while the app screen is open.
-- While enabled, the privileged process sleeps until Android sends a media-key event. Disabling the switch unregisters the listener and stops that UserService process.
-- The listener only returns `true` for `HEADSETHOOK` and Android `MEDIA_*` key codes.
+- No USB-interface claiming.
+- No USB control transfers or audio-driver manipulation.
+- No `EVIOCGRAB`, input-device disable, key-layout replacement, root module, or kernel modification.
+- The `getevent` process blocks while waiting for an event; it does not poll continuously.
+- No wake lock, silent playback, network permission, or media-session playback takeover.
 
-This is much lower risk than claiming a USB audio/HID interface. It still cannot be guaranteed that an OEM framework bug will never crash, but this code uses a system media-service listener rather than a hardware driver path.
+The volume guard is deliberately a **neutralizer**, not a kernel-level hard block. Android may briefly display its volume overlay, and an extremely short volume change may be observable before the previous level is restored. This is safer than exclusively grabbing the input node.
 
-## Important limitations
+## Requirements and limitations
 
-- Requires Android 8.0/API 26 or newer. The project now declares minSdk 26 because the privileged listener requires it and Shizuku 13.1.5 itself requires at least API 24.
-- Requires Shizuku v13+ and Shizuku permission.
-- Shizuku must be running. After a phone or Shizuku restart, reopen Button Silencer and reconnect.
-- This privileged listener handles media keys, not ordinary `VOLUME_UP`/`VOLUME_DOWN` presses.
-- Accessibility remains included as a separate fallback for screen-on media/assistant/call keys and external volume keys.
-- Android supports only one global media-key listener. Another privileged/Shizuku app using the same listener can replace this one.
+- Android 8.0/API 26 or newer.
+- Shizuku v13+ running with permission granted.
+- The headset must expose its controls as a Linux/Android input device visible to `getevent`.
+- Some DACs change their own hardware volume internally. Android cannot undo a change that never reaches the phone as a key/input event.
+- The app refuses devices whose names look like built-in phone-button devices such as `gpio-keys`, `qpnp`, PMIC/keypad, or side-key devices.
+- If the device path changes after reconnecting, the service attempts to find the same device by name.
 
 ## Build with GitHub Actions
 
 1. Upload the entire repository, including `.github/workflows/build-apk.yml`.
-2. Run **Build APKs** from GitHub Actions.
+2. Run **Build APKs**.
 3. Download the `ButtonSilencer-apks` artifact.
-4. Install `ButtonSilencer-release.apk` for the smaller R8-minified build. The debug and release variants use different package IDs, so uninstall the old debug build first if you do not want two app icons.
+4. Install `ButtonSilencer-release.apk` for the smaller R8-minified build.
 
-The workflow also builds `ButtonSilencer-debug.apk`, runs unit tests, runs debug and release lint, verifies both APK signatures, and writes SHA-256 checksums.
+The artifact also contains `ButtonSilencer-debug.apk` and `SHA256SUMS.txt`. Tests and both debug/release lint tasks run before APK assembly.
 
-## Release signing note
+## Enable and configure
 
-Both APKs are signed with the repository's deterministic test key so Actions can produce directly installable APKs and later builds can update earlier ones. This is appropriate for private testing, not Play Store or public production distribution.
+1. Start Shizuku.
+2. Open Button Silencer and enable **Shizuku media-key listener**.
+3. Approve Shizuku permission and wait for the media listener to show `ACTIVE`.
+4. Connect the IEM/DAC/headset.
+5. Tap **Scan volume-key input devices**.
+6. Select the USB/IEM/headset entry. Do not select entries marked as likely phone buttons.
+7. Enable **Neutralize volume presses from selected headset**.
+8. Lock the phone and test play/pause and both headset volume buttons.
 
-## Enable
+The status panel shows the selected device, monitored `/dev/input/event*` path, neutralized-event count, and any permission/device error.
 
-1. Start Shizuku and verify it says it is running.
-2. Open Button Silencer.
-3. Enable **Shizuku media-key listener**.
-4. Approve the permission request in Shizuku.
-5. Wait for the status to show `ACTIVE`.
-6. Lock the phone and test the IEM media/headset button.
+## Signing
 
-The privileged status box shows the latest received media key and whether it was blocked.
-
-
-## v2.3 build corrections
-
-- Project `minSdk` is API 26, matching the privileged-listener requirement and exceeding Shizuku 13.1.5's API 24 minimum.
-- The project-check script is invoked with `bash`, so GitHub Actions does not depend on the executable permission surviving ZIP extraction or browser uploads.
-- The script changes to the repository root before checking files, so it also works when called from another working directory.
-- GitHub Actions runs manifest and AIDL preflight tasks before tests, lint, and APK assembly.
-
-
-## v2.3 runtime fix
-
-Recent Android releases initialize `MediaFrameworkPlatformInitializer` during normal app-process startup. A Shizuku UserService is a separate shell process and may not receive that bootstrap. v2.3 initializes the framework media-service registry before constructing `MediaSessionManager`, fixing the `getMediaSessionServiceRegisterer()` null-reference error shown on affected devices.
+Both APKs use the repository's deterministic test key so later Actions builds can update earlier private-test installs. Replace it before any public distribution.

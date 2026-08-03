@@ -68,6 +68,46 @@
             android:textSize="13sp"
             android:textStyle="italic" />
 
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/headset_volume_title"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/scanVolumeDevicesButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/scan_volume_devices" />
+
+        <Spinner
+            android:id="@+id/volumeDeviceSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:prompt="@string/headset_device_prompt" />
+
+        <Switch
+            android:id="@+id/headsetVolumeGuardSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:text="@string/headset_volume_switch" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/headset_volume_help"
+            android:textSize="13sp"
+            android:textStyle="italic" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

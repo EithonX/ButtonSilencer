@@ -8,11 +8,15 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 build_file="app/build.gradle"
 manifest="app/src/main/AndroidManifest.xml"
 aidl="app/src/main/aidl/com/buttons/silencer/IPrivilegedBlocker.aidl"
+service_source="app/src/main/java/com/buttons/silencer/PrivilegedMediaKeyService.java"
 
-[[ -f "$build_file" && -f "$manifest" && -f "$aidl" ]]
+[[ -f "$build_file" && -f "$manifest" && -f "$aidl" && -f "$service_source" ]]
 grep -Eq '^[[:space:]]*minSdk[[:space:]]+26([[:space:]]|$)' "$build_file"
 grep -Fq "implementation 'dev.rikka.shizuku:api:13.1.5'" "$build_file"
 grep -Fq 'void destroy() = 16777114;' "$aidl"
 grep -Fq 'rikka.shizuku.ShizukuProvider' "$manifest"
+grep -Fq 'initializeMediaFrameworkIfNeeded();' "$service_source"
+grep -Fq 'android.media.MediaFrameworkPlatformInitializer' "$service_source"
+grep -Fq 'setMediaServiceManager' "$service_source"
 
 echo "Project configuration preflight passed."

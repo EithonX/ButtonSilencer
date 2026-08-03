@@ -150,11 +150,19 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
 
     @SuppressLint({"PrivateApi", "DiscouragedPrivateApi"})
     private static Object obtainMediaSessionManager(Context context) throws Exception {
+        // A Shizuku UserService runs in a fresh shell process rather than the normal app
+        // process. On recent Android releases, that process does not execute the platform
+        // bootstrap that initializes MediaFrameworkPlatformInitializer. MediaSessionManager's
+        // constructor then dereferences a null MediaServiceManager. Initialize the same tiny
+        // service-registry object that Android initializes during a normal app-process startup.
+        initializeMediaFrameworkIfNeeded();
+
         Object manager = null;
         try {
             manager = context.getSystemService(Context.MEDIA_SESSION_SERVICE);
         } catch (RuntimeException ignored) {
-            // Shizuku's UserService Context is not a normal app Context on every Android build.
+            // Some OEM UserService Context implementations cannot create framework wrappers.
+            // The direct constructor below uses the now-initialized media service registry.
         }
         if (manager != null) {
             return manager;
@@ -168,6 +176,49 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             throw new IllegalStateException("MediaSessionManager is unavailable");
         }
         return manager;
+    }
+
+    /**
+     * Recreates the media-framework bootstrap that is normally performed by Android's app
+     * process initialization. Older Android releases do not have these classes and do not need
+     * this step, so ClassNotFoundException is intentionally treated as "not applicable".
+     */
+    @SuppressLint({"PrivateApi", "DiscouragedPrivateApi"})
+    private static void initializeMediaFrameworkIfNeeded() throws Exception {
+        final Class<?> initializerClass;
+        try {
+            initializerClass = Class.forName(
+                    "android.media.MediaFrameworkPlatformInitializer"
+            );
+        } catch (ClassNotFoundException notPresentOnOlderAndroid) {
+            return;
+        }
+
+        Method getter = initializerClass.getDeclaredMethod("getMediaServiceManager");
+        getter.setAccessible(true);
+        if (getter.invoke(null) != null) {
+            return;
+        }
+
+        Class<?> managerClass = Class.forName("android.media.MediaServiceManager");
+        Constructor<?> managerConstructor = managerClass.getDeclaredConstructor();
+        managerConstructor.setAccessible(true);
+        Object serviceManager = managerConstructor.newInstance();
+
+        Method setter = initializerClass.getDeclaredMethod(
+                "setMediaServiceManager",
+                managerClass
+        );
+        setter.setAccessible(true);
+        try {
+            setter.invoke(null, serviceManager);
+        } catch (InvocationTargetException exception) {
+            // Another thread may have initialized it between the getter and setter. Accept that
+            // race only when the getter confirms a valid instance now exists.
+            if (getter.invoke(null) == null) {
+                throw exception;
+            }
+        }
     }
 
     private Object handleListenerInvocation(Object proxy, Method method, Object[] args) {

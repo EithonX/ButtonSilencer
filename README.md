@@ -1,4 +1,4 @@
-# Button Silencer — Shizuku privileged media-key build v2.2
+# Button Silencer — Shizuku privileged media-key build v2.3
 
 This revision replaces the unreliable screen-off Accessibility-only design with Android's privileged media-key listener through a Shizuku UserService.
 
@@ -51,9 +51,14 @@ Both APKs are signed with the repository's deterministic test key so Actions can
 The privileged status box shows the latest received media key and whether it was blocked.
 
 
-## v2.2 build corrections
+## v2.3 build corrections
 
 - Project `minSdk` is API 26, matching the privileged-listener requirement and exceeding Shizuku 13.1.5's API 24 minimum.
 - The project-check script is invoked with `bash`, so GitHub Actions does not depend on the executable permission surviving ZIP extraction or browser uploads.
 - The script changes to the repository root before checking files, so it also works when called from another working directory.
 - GitHub Actions runs manifest and AIDL preflight tasks before tests, lint, and APK assembly.
+
+
+## v2.3 runtime fix
+
+Recent Android releases initialize `MediaFrameworkPlatformInitializer` during normal app-process startup. A Shizuku UserService is a separate shell process and may not receive that bootstrap. v2.3 initializes the framework media-service registry before constructing `MediaSessionManager`, fixing the `getMediaSessionServiceRegisterer()` null-reference error shown on affected devices.

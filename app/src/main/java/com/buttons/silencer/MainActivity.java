@@ -2,20 +2,17 @@ package com.buttons.silencer;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -26,34 +23,41 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
-    private final Handler refreshHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
-    private final List<String> volumeDeviceValues = new ArrayList<>();
-    private final List<String> volumeDeviceLabels = new ArrayList<>();
+    private final ShizukuController.Observer controllerObserver =
+            this::onControllerStateChanged;
 
-    private TextView statusText;
-    private TextView shizukuStatusText;
-    private TextView eventLogText;
-    private Switch masterSwitch;
-    private Switch mediaSwitch;
-    private Switch externalVolumeSwitch;
-    private Switch assistCallSwitch;
-    private Switch allVolumeSwitch;
-    private Switch privilegedMediaSwitch;
-    private Switch headsetVolumeGuardSwitch;
-    private Spinner volumeDeviceSpinner;
-    private Button scanVolumeDevicesButton;
-    private ArrayAdapter<String> volumeDeviceAdapter;
     private ShizukuController shizukuController;
-    private boolean updatingVolumeSelection;
 
-    private final Runnable refreshRunnable = new Runnable() {
-        @Override
-        public void run() {
-            refreshStatusAndLog();
-            refreshHandler.postDelayed(this, 750L);
-        }
-    };
+    private TextView protectionStatusTitle;
+    private TextView protectionStatusDetail;
+    private TextView statusDot;
+    private TextView selectedDeviceName;
+    private TextView selectedDevicePath;
+    private TextView accessibilityStatus;
+    private TextView diagnosticsText;
+    private TextView advancedHeader;
+    private TextView aboutHeader;
+    private View protectionStatusCard;
+    private View advancedContainer;
+    private View aboutContainer;
+    private Switch protectionSwitch;
+    private Switch mediaListenerSwitch;
+    private Switch headsetVolumeGuardSwitch;
+    private Switch diagnosticLoggingSwitch;
+    private Switch accessibilityMasterSwitch;
+    private Switch accessibilityMediaSwitch;
+    private Switch accessibilityExternalVolumeSwitch;
+    private Switch accessibilityAssistCallSwitch;
+    private Switch accessibilityAllVolumeSwitch;
+    private Button scanDevicesButton;
+    private Button forgetDeviceButton;
+    private Button reconnectShizukuButton;
+
+    private boolean updatingUi;
+    private boolean advancedExpanded;
+    private boolean aboutExpanded;
+    private boolean pendingDeviceScan;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,71 +65,29 @@ public final class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         shizukuController = ((ButtonSilencerApp) getApplication()).getShizukuController();
+        bindViews();
+        attachListeners();
 
-        statusText = findViewById(R.id.statusText);
-        shizukuStatusText = findViewById(R.id.shizukuStatusText);
-        eventLogText = findViewById(R.id.eventLogText);
-        masterSwitch = findViewById(R.id.masterSwitch);
-        mediaSwitch = findViewById(R.id.mediaSwitch);
-        externalVolumeSwitch = findViewById(R.id.externalVolumeSwitch);
-        assistCallSwitch = findViewById(R.id.assistCallSwitch);
-        allVolumeSwitch = findViewById(R.id.allVolumeSwitch);
-        privilegedMediaSwitch = findViewById(R.id.privilegedMediaSwitch);
-        headsetVolumeGuardSwitch = findViewById(R.id.headsetVolumeGuardSwitch);
-        volumeDeviceSpinner = findViewById(R.id.volumeDeviceSpinner);
-        scanVolumeDevicesButton = findViewById(R.id.scanVolumeDevicesButton);
+        TextView versionText = findViewById(R.id.versionText);
+        versionText.setText(getString(R.string.version_format, BuildConfig.VERSION_NAME));
 
-        Button reconnectShizukuButton = findViewById(R.id.reconnectShizukuButton);
-        Button openAccessibilityButton = findViewById(R.id.openAccessibilityButton);
-        Button openAppInfoButton = findViewById(R.id.openAppInfoButton);
-        Button clearEventsButton = findViewById(R.id.clearEventsButton);
-
-        volumeDeviceAdapter = new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_spinner_item,
-                volumeDeviceLabels
-        );
-        volumeDeviceAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        volumeDeviceSpinner.setAdapter(volumeDeviceAdapter);
-
-        loadSwitchValues();
-        loadSavedVolumeDevice();
-        attachSwitchListeners();
-        attachVolumeDeviceListeners();
-
-        reconnectShizukuButton.setOnClickListener(view ->
-                shizukuController.requestPermissionOrConnect());
-
-        openAccessibilityButton.setOnClickListener(view ->
-                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-
-        openAppInfoButton.setOnClickListener(view -> startActivity(new Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:" + getPackageName())
-        )));
-
-        clearEventsButton.setOnClickListener(view -> {
-            EventLogStore.clear(this);
-            refreshStatusAndLog();
-        });
-
-        refreshStatusAndLog();
+        updateExpansionState();
+        refreshUi();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        if (Preferences.privilegedMediaEnabled(this)
-                || Preferences.headsetVolumeGuardEnabled(this)) {
+        shizukuController.addObserver(controllerObserver);
+        if (Preferences.privilegedProtectionRequested(this)) {
             shizukuController.requestPermissionOrConnect();
         }
-        refreshHandler.removeCallbacks(refreshRunnable);
-        refreshHandler.post(refreshRunnable);
+        refreshUi();
     }
 
     @Override
     protected void onStop() {
-        refreshHandler.removeCallbacks(refreshRunnable);
+        shizukuController.removeObserver(controllerObserver);
         super.onStop();
     }
 
@@ -135,205 +97,400 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private void loadSwitchValues() {
-        masterSwitch.setChecked(Preferences.isMasterEnabled(this));
-        mediaSwitch.setChecked(Preferences.blockMedia(this));
-        externalVolumeSwitch.setChecked(Preferences.blockExternalVolume(this));
-        assistCallSwitch.setChecked(Preferences.blockAssistCall(this));
-        allVolumeSwitch.setChecked(Preferences.blockAllVolume(this));
-        privilegedMediaSwitch.setChecked(Preferences.privilegedMediaEnabled(this));
-        headsetVolumeGuardSwitch.setChecked(Preferences.headsetVolumeGuardEnabled(this));
+    private void bindViews() {
+        protectionStatusTitle = findViewById(R.id.protectionStatusTitle);
+        protectionStatusDetail = findViewById(R.id.protectionStatusDetail);
+        statusDot = findViewById(R.id.statusDot);
+        selectedDeviceName = findViewById(R.id.selectedDeviceName);
+        selectedDevicePath = findViewById(R.id.selectedDevicePath);
+        accessibilityStatus = findViewById(R.id.accessibilityStatus);
+        diagnosticsText = findViewById(R.id.diagnosticsText);
+        advancedHeader = findViewById(R.id.advancedHeader);
+        aboutHeader = findViewById(R.id.aboutHeader);
+        protectionStatusCard = findViewById(R.id.protectionStatusCard);
+        advancedContainer = findViewById(R.id.advancedContainer);
+        aboutContainer = findViewById(R.id.aboutContainer);
+        protectionSwitch = findViewById(R.id.protectionSwitch);
+        mediaListenerSwitch = findViewById(R.id.mediaListenerSwitch);
+        headsetVolumeGuardSwitch = findViewById(R.id.headsetVolumeGuardSwitch);
+        diagnosticLoggingSwitch = findViewById(R.id.diagnosticLoggingSwitch);
+        accessibilityMasterSwitch = findViewById(R.id.accessibilityMasterSwitch);
+        accessibilityMediaSwitch = findViewById(R.id.accessibilityMediaSwitch);
+        accessibilityExternalVolumeSwitch =
+                findViewById(R.id.accessibilityExternalVolumeSwitch);
+        accessibilityAssistCallSwitch = findViewById(R.id.accessibilityAssistCallSwitch);
+        accessibilityAllVolumeSwitch = findViewById(R.id.accessibilityAllVolumeSwitch);
+        scanDevicesButton = findViewById(R.id.scanDevicesButton);
+        forgetDeviceButton = findViewById(R.id.forgetDeviceButton);
+        reconnectShizukuButton = findViewById(R.id.reconnectShizukuButton);
     }
 
-    private void loadSavedVolumeDevice() {
-        String saved = Preferences.headsetVolumeDevice(this);
-        if (saved.isEmpty()) {
-            volumeDeviceSpinner.setEnabled(false);
-            return;
-        }
-        updatingVolumeSelection = true;
-        volumeDeviceValues.add(saved);
-        volumeDeviceLabels.add(VolumeInputDeviceParser.displayLabel(saved));
-        volumeDeviceAdapter.notifyDataSetChanged();
-        volumeDeviceSpinner.setSelection(0, false);
-        volumeDeviceSpinner.setEnabled(true);
-        updatingVolumeSelection = false;
-    }
-
-    private void attachSwitchListeners() {
-        masterSwitch.setOnCheckedChangeListener((button, checked) -> {
-            Preferences.putBoolean(this, Preferences.KEY_MASTER, checked);
-            refreshStatusAndLog();
+    private void attachListeners() {
+        protectionSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (updatingUi) {
+                return;
+            }
+            shizukuController.setProtectionEnabled(checked);
+            if (checked && Preferences.headsetVolumeDevice(this).isEmpty()) {
+                Toast.makeText(this, R.string.select_device_to_block_volume, Toast.LENGTH_LONG)
+                        .show();
+            }
+            refreshUi();
         });
 
-        mediaSwitch.setOnCheckedChangeListener((button, checked) ->
-                Preferences.putBoolean(this, Preferences.KEY_MEDIA, checked));
-
-        externalVolumeSwitch.setOnCheckedChangeListener((button, checked) ->
-                Preferences.putBoolean(this, Preferences.KEY_EXTERNAL_VOLUME, checked));
-
-        assistCallSwitch.setOnCheckedChangeListener((button, checked) ->
-                Preferences.putBoolean(this, Preferences.KEY_ASSIST_CALL, checked));
-
-        allVolumeSwitch.setOnCheckedChangeListener((button, checked) -> {
-            Preferences.putBoolean(this, Preferences.KEY_ALL_VOLUME, checked);
-            if (checked) {
-                Toast.makeText(this, R.string.block_all_volume_warning, Toast.LENGTH_LONG).show();
+        mediaListenerSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                shizukuController.setMediaListenerEnabled(checked);
+                refreshUi();
             }
-        });
-
-        privilegedMediaSwitch.setOnCheckedChangeListener((button, checked) -> {
-            shizukuController.setPrivilegedEnabled(checked);
-            if (checked) {
-                Toast.makeText(this, R.string.shizuku_enable_hint, Toast.LENGTH_LONG).show();
-            }
-            refreshStatusAndLog();
         });
 
         headsetVolumeGuardSwitch.setOnCheckedChangeListener((button, checked) -> {
-            String selected = selectedVolumeDevice();
+            if (updatingUi) {
+                return;
+            }
+            String selected = Preferences.headsetVolumeDevice(this);
             if (checked && selected.isEmpty()) {
+                updatingUi = true;
                 button.setChecked(false);
-                Toast.makeText(this, R.string.headset_device_prompt, Toast.LENGTH_LONG).show();
+                updatingUi = false;
+                Toast.makeText(this, R.string.select_device_first, Toast.LENGTH_LONG).show();
                 scanVolumeInputDevices();
                 return;
             }
             shizukuController.setHeadsetVolumeGuard(selected, checked);
-            refreshStatusAndLog();
+            refreshUi();
+        });
+
+        diagnosticLoggingSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                shizukuController.setDiagnosticLogging(checked);
+                requestDiagnosticsRefresh();
+            }
+        });
+
+        accessibilityMasterSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                Preferences.putBoolean(this, Preferences.KEY_MASTER, checked);
+                refreshUi();
+            }
+        });
+        accessibilityMediaSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                Preferences.putBoolean(this, Preferences.KEY_MEDIA, checked);
+            }
+        });
+        accessibilityExternalVolumeSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                Preferences.putBoolean(this, Preferences.KEY_EXTERNAL_VOLUME, checked);
+            }
+        });
+        accessibilityAssistCallSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                Preferences.putBoolean(this, Preferences.KEY_ASSIST_CALL, checked);
+            }
+        });
+        accessibilityAllVolumeSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!updatingUi) {
+                Preferences.putBoolean(this, Preferences.KEY_ALL_VOLUME, checked);
+                if (checked) {
+                    Toast.makeText(this, R.string.block_all_volume_warning, Toast.LENGTH_LONG)
+                            .show();
+                }
+            }
+        });
+
+        scanDevicesButton.setOnClickListener(view -> scanVolumeInputDevices());
+        forgetDeviceButton.setOnClickListener(view -> {
+            shizukuController.forgetHeadsetDevice();
+            Toast.makeText(this, R.string.device_forgotten, Toast.LENGTH_SHORT).show();
+            refreshUi();
+        });
+        reconnectShizukuButton.setOnClickListener(view ->
+                shizukuController.requestPermissionOrConnect());
+
+        findViewById(R.id.openAccessibilityButton).setOnClickListener(view ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+        findViewById(R.id.openAppInfoButton).setOnClickListener(view ->
+                startActivity(new Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName())
+                )));
+        findViewById(R.id.refreshDiagnosticsButton).setOnClickListener(view ->
+                requestDiagnosticsRefresh());
+        findViewById(R.id.clearDiagnosticsButton).setOnClickListener(view -> {
+            EventLogStore.clear(this);
+            requestDiagnosticsRefresh();
+        });
+        findViewById(R.id.githubButton).setOnClickListener(view ->
+                openUrl(getString(R.string.developer_url)));
+
+        advancedHeader.setOnClickListener(view -> {
+            advancedExpanded = !advancedExpanded;
+            updateExpansionState();
+            if (advancedExpanded) {
+                requestDiagnosticsRefresh();
+            }
+        });
+        aboutHeader.setOnClickListener(view -> {
+            aboutExpanded = !aboutExpanded;
+            updateExpansionState();
         });
     }
 
-    private void attachVolumeDeviceListeners() {
-        scanVolumeDevicesButton.setOnClickListener(view -> scanVolumeInputDevices());
-        volumeDeviceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (updatingVolumeSelection
-                        || position < 0
-                        || position >= volumeDeviceValues.size()) {
-                    return;
-                }
-                String selected = volumeDeviceValues.get(position);
-                Preferences.putString(
-                        MainActivity.this,
-                        Preferences.KEY_HEADSET_VOLUME_DEVICE,
-                        selected
-                );
-                if (headsetVolumeGuardSwitch.isChecked()) {
-                    shizukuController.setHeadsetVolumeGuard(selected, true);
-                }
-            }
+    private void onControllerStateChanged() {
+        refreshUi();
+        if (pendingDeviceScan && shizukuController.isRemoteConnected()) {
+            pendingDeviceScan = false;
+            scanVolumeInputDevices();
+        }
+        if (advancedExpanded) {
+            requestDiagnosticsRefresh();
+        }
+    }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // Nothing to persist.
-            }
-        });
+    private void refreshUi() {
+        if (isDestroyed()) {
+            return;
+        }
+
+        boolean mediaDesired = Preferences.privilegedMediaEnabled(this);
+        boolean volumeDesired = Preferences.headsetVolumeGuardEnabled(this);
+        boolean protectionDesired = mediaDesired || volumeDesired;
+        String selected = Preferences.headsetVolumeDevice(this);
+        VolumeInputDeviceParser.Device selectedDevice = VolumeInputDeviceParser.decode(selected);
+        int stateFlags = shizukuController.getStateFlags();
+
+        updatingUi = true;
+        protectionSwitch.setChecked(protectionDesired);
+        mediaListenerSwitch.setChecked(mediaDesired);
+        headsetVolumeGuardSwitch.setChecked(volumeDesired);
+        headsetVolumeGuardSwitch.setEnabled(!selected.isEmpty());
+        diagnosticLoggingSwitch.setChecked(Preferences.diagnosticLoggingEnabled(this));
+        accessibilityMasterSwitch.setChecked(Preferences.isMasterEnabled(this));
+        accessibilityMediaSwitch.setChecked(Preferences.blockMedia(this));
+        accessibilityExternalVolumeSwitch.setChecked(Preferences.blockExternalVolume(this));
+        accessibilityAssistCallSwitch.setChecked(Preferences.blockAssistCall(this));
+        accessibilityAllVolumeSwitch.setChecked(Preferences.blockAllVolume(this));
+        updatingUi = false;
+
+        if (selectedDevice == null) {
+            selectedDeviceName.setText(R.string.no_headset_selected);
+            selectedDevicePath.setText(R.string.scan_device_hint);
+            forgetDeviceButton.setEnabled(false);
+        } else {
+            selectedDeviceName.setText(selectedDevice.name);
+            selectedDevicePath.setText(selectedDevice.path);
+            forgetDeviceButton.setEnabled(true);
+        }
+
+        updateProtectionStatus(
+                protectionDesired,
+                mediaDesired,
+                volumeDesired,
+                stateFlags
+        );
+
+        boolean accessibilityEnabled = isAccessibilityServiceEnabled();
+        accessibilityStatus.setText(getString(
+                R.string.accessibility_status_format,
+                getString(accessibilityEnabled
+                        ? R.string.service_enabled
+                        : R.string.service_disabled),
+                getString(Preferences.isMasterEnabled(this)
+                        ? R.string.blocking_active
+                        : R.string.blocking_paused)
+        ));
+        accessibilityStatus.setAlpha(accessibilityEnabled ? 1.0f : 0.68f);
+    }
+
+    private void updateProtectionStatus(
+            boolean protectionDesired,
+            boolean mediaDesired,
+            boolean volumeDesired,
+            int stateFlags
+    ) {
+        if (!protectionDesired) {
+            applyStatus(
+                    R.string.protection_off,
+                    R.string.protection_off_detail,
+                    R.drawable.bg_status_inactive,
+                    R.color.status_inactive
+            );
+            reconnectShizukuButton.setVisibility(View.GONE);
+            return;
+        }
+
+        if (!shizukuController.isBinderAlive()) {
+            applyStatus(
+                    R.string.shizuku_not_running,
+                    R.string.shizuku_not_running_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
+            return;
+        }
+
+        if (!shizukuController.hasPermission()) {
+            applyStatus(
+                    R.string.permission_required,
+                    R.string.permission_required_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
+            return;
+        }
+
+        if (!shizukuController.isRemoteConnected()) {
+            applyStatus(
+                    R.string.connecting,
+                    R.string.connecting_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
+            return;
+        }
+
+        boolean mediaReady = !mediaDesired
+                || (stateFlags & PrivilegedState.MEDIA_ENABLED) != 0;
+        boolean volumeReady = !volumeDesired
+                || (stateFlags & PrivilegedState.VOLUME_GUARD_ACTIVE) != 0;
+        boolean hasError = (stateFlags & PrivilegedState.HAS_ERROR) != 0;
+
+        if (mediaReady && volumeReady && !hasError) {
+            applyStatus(
+                    R.string.protection_active,
+                    volumeDesired
+                            ? R.string.protection_active_full_detail
+                            : R.string.protection_active_media_only_detail,
+                    R.drawable.bg_status_active,
+                    R.color.status_active
+            );
+            reconnectShizukuButton.setVisibility(View.GONE);
+        } else {
+            applyStatus(
+                    R.string.protection_partial,
+                    R.string.protection_partial_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void applyStatus(
+            int titleRes,
+            int detailRes,
+            int backgroundRes,
+            int dotColorRes
+    ) {
+        protectionStatusTitle.setText(titleRes);
+        protectionStatusDetail.setText(detailRes);
+        protectionStatusCard.setBackgroundResource(backgroundRes);
+        statusDot.setTextColor(getColor(dotColorRes));
     }
 
     private void scanVolumeInputDevices() {
         if (!shizukuController.isRemoteConnected()) {
-            Toast.makeText(this, R.string.connect_before_scan, Toast.LENGTH_LONG).show();
+            pendingDeviceScan = true;
+            Toast.makeText(this, R.string.connecting_before_scan, Toast.LENGTH_LONG).show();
             shizukuController.requestPermissionOrConnect();
             return;
         }
 
-        scanVolumeDevicesButton.setEnabled(false);
+        scanDevicesButton.setEnabled(false);
+        scanDevicesButton.setText(R.string.scanning);
         ioExecutor.execute(() -> {
-            String[] devices = shizukuController.listVolumeInputDevices();
+            String[] scanned = shizukuController.listVolumeInputDevices();
             runOnUiThread(() -> {
-                scanVolumeDevicesButton.setEnabled(true);
-                applyScannedVolumeDevices(devices);
+                if (isDestroyed()) {
+                    return;
+                }
+                scanDevicesButton.setEnabled(true);
+                scanDevicesButton.setText(R.string.scan_devices);
+                showDevicePicker(scanned);
             });
         });
     }
 
-    private void applyScannedVolumeDevices(String[] devices) {
-        String saved = Preferences.headsetVolumeDevice(this);
-        VolumeInputDeviceParser.Device savedDevice = VolumeInputDeviceParser.decode(saved);
-        int selectedIndex = -1;
+    private void showDevicePicker(String[] encodedDevices) {
+        List<String> values = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        int ignoredInternalCount = 0;
 
-        updatingVolumeSelection = true;
-        volumeDeviceValues.clear();
-        volumeDeviceLabels.clear();
-
-        if (devices != null) {
-            for (String encoded : devices) {
-                if (encoded == null || VolumeInputDeviceParser.decode(encoded) == null) {
+        if (encodedDevices != null) {
+            for (String encoded : encodedDevices) {
+                VolumeInputDeviceParser.Device device = VolumeInputDeviceParser.decode(encoded);
+                if (device == null) {
                     continue;
                 }
-                if (selectedIndex < 0 && encoded.equals(saved)) {
-                    selectedIndex = volumeDeviceValues.size();
-                } else if (selectedIndex < 0 && savedDevice != null) {
-                    VolumeInputDeviceParser.Device candidate =
-                            VolumeInputDeviceParser.decode(encoded);
-                    if (candidate != null
-                            && !candidate.likelyInternal
-                            && candidate.name.equals(savedDevice.name)) {
-                        selectedIndex = volumeDeviceValues.size();
-                    }
+                if (device.likelyInternal) {
+                    ignoredInternalCount++;
+                    continue;
                 }
-                volumeDeviceValues.add(encoded);
-                volumeDeviceLabels.add(VolumeInputDeviceParser.displayLabel(encoded));
+                values.add(encoded);
+                labels.add(VolumeInputDeviceParser.displayLabel(encoded));
             }
         }
 
-        volumeDeviceAdapter.notifyDataSetChanged();
-        boolean hasDevices = !volumeDeviceValues.isEmpty();
-        volumeDeviceSpinner.setEnabled(hasDevices);
-
-        if (hasDevices) {
-            if (selectedIndex < 0) {
-                selectedIndex = firstExternalCandidateIndex();
-            }
-            volumeDeviceSpinner.setSelection(Math.max(0, selectedIndex), false);
-            String selected = volumeDeviceValues.get(Math.max(0, selectedIndex));
-            Preferences.putString(this, Preferences.KEY_HEADSET_VOLUME_DEVICE, selected);
-            if (headsetVolumeGuardSwitch.isChecked()) {
-                shizukuController.setHeadsetVolumeGuard(selected, true);
-            }
-        } else {
-            headsetVolumeGuardSwitch.setChecked(false);
-            Toast.makeText(this, R.string.no_volume_devices, Toast.LENGTH_LONG).show();
+        if (values.isEmpty()) {
+            Toast.makeText(
+                    this,
+                    ignoredInternalCount > 0
+                            ? R.string.only_phone_buttons_found
+                            : R.string.no_volume_devices,
+                    Toast.LENGTH_LONG
+            ).show();
+            return;
         }
 
-        updatingVolumeSelection = false;
+        CharSequence[] items = labels.toArray(new CharSequence[0]);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.choose_headset_device)
+                .setItems(items, (dialog, index) -> {
+                    String selected = values.get(index);
+                    boolean enableGuard = Preferences.headsetVolumeGuardEnabled(this)
+                            || (protectionSwitch.isChecked()
+                            && Preferences.headsetVolumeDevice(this).isEmpty());
+                    shizukuController.setHeadsetVolumeGuard(selected, enableGuard);
+                    Toast.makeText(this, R.string.device_selected, Toast.LENGTH_SHORT).show();
+                    refreshUi();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
-    private int firstExternalCandidateIndex() {
-        for (int i = 0; i < volumeDeviceValues.size(); i++) {
-            VolumeInputDeviceParser.Device device =
-                    VolumeInputDeviceParser.decode(volumeDeviceValues.get(i));
-            if (device != null && !device.likelyInternal) {
-                return i;
-            }
+    private void requestDiagnosticsRefresh() {
+        if (!advancedExpanded) {
+            return;
         }
-        return 0;
+        diagnosticsText.setText(R.string.loading_diagnostics);
+        ioExecutor.execute(() -> {
+            String remoteStatus = shizukuController.getStatus();
+            String accessibilityLog = EventLogStore.formatForDisplay(this);
+            String combined = remoteStatus
+                    + "\n\nAccessibility session events\n"
+                    + accessibilityLog;
+            runOnUiThread(() -> {
+                if (!isDestroyed()) {
+                    diagnosticsText.setText(combined);
+                }
+            });
+        });
     }
 
-    private String selectedVolumeDevice() {
-        int position = volumeDeviceSpinner.getSelectedItemPosition();
-        if (position >= 0 && position < volumeDeviceValues.size()) {
-            return volumeDeviceValues.get(position);
-        }
-        return Preferences.headsetVolumeDevice(this);
-    }
-
-    private void refreshStatusAndLog() {
-        boolean serviceEnabled = isAccessibilityServiceEnabled();
-        boolean blockingEnabled = Preferences.isMasterEnabled(this);
-
-        String serviceState = getString(serviceEnabled
-                ? R.string.service_enabled
-                : R.string.service_disabled);
-        String blockingState = getString(blockingEnabled
-                ? R.string.blocking_active
-                : R.string.blocking_paused);
-
-        statusText.setText(getString(R.string.status_format, serviceState, blockingState));
-        statusText.setAlpha(serviceEnabled ? 1.0f : 0.65f);
-        shizukuStatusText.setText(shizukuController.getStatus());
-        eventLogText.setText(EventLogStore.formatForDisplay(this));
+    private void updateExpansionState() {
+        advancedContainer.setVisibility(advancedExpanded ? View.VISIBLE : View.GONE);
+        aboutContainer.setVisibility(aboutExpanded ? View.VISIBLE : View.GONE);
+        advancedHeader.setText(advancedExpanded
+                ? R.string.advanced_hide
+                : R.string.advanced_show);
+        aboutHeader.setText(aboutExpanded
+                ? R.string.about_hide
+                : R.string.about_show);
     }
 
     private boolean isAccessibilityServiceEnabled() {
@@ -345,14 +502,15 @@ public final class MainActivity extends Activity {
 
         ComponentName expected = new ComponentName(this, ButtonBlockerService.class);
         List<AccessibilityServiceInfo> enabledServices =
-                manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
+                manager.getEnabledAccessibilityServiceList(
+                        AccessibilityServiceInfo.FEEDBACK_ALL_MASK
+                );
 
         for (AccessibilityServiceInfo info : enabledServices) {
             ResolveInfo resolveInfo = info.getResolveInfo();
             if (resolveInfo == null || resolveInfo.serviceInfo == null) {
                 continue;
             }
-
             ComponentName actual = new ComponentName(
                     resolveInfo.serviceInfo.packageName,
                     resolveInfo.serviceInfo.name
@@ -361,7 +519,14 @@ public final class MainActivity extends Activity {
                 return true;
             }
         }
-
         return false;
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (ActivityNotFoundException exception) {
+            Toast.makeText(this, R.string.no_browser, Toast.LENGTH_LONG).show();
+        }
     }
 }

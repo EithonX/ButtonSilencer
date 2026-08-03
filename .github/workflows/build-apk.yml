@@ -48,13 +48,32 @@ jobs:
           gradle-version: '8.13'
 
       - name: Preflight manifests and AIDL
-        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) clean :app:processDebugMainManifest :app:processReleaseMainManifest :app:compileDebugAidl :app:compileReleaseAidl
+        shell: bash
+        run: >-
+          gradle --no-daemon --stacktrace
+          -PversionCode=$((300000 + GITHUB_RUN_NUMBER))
+          clean
+          :app:processDebugMainManifest
+          :app:processReleaseMainManifest
+          :app:compileDebugAidl
+          :app:compileReleaseAidl
 
       - name: Run unit tests and lint
-        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) testDebugUnitTest lintDebug lintRelease
+        shell: bash
+        run: >-
+          gradle --no-daemon --stacktrace
+          -PversionCode=$((300000 + GITHUB_RUN_NUMBER))
+          testDebugUnitTest
+          lintDebug
+          lintRelease
 
       - name: Build signed debug and minified release APKs
-        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) assembleDebug assembleRelease
+        shell: bash
+        run: >-
+          gradle --no-daemon --stacktrace
+          -PversionCode=$((300000 + GITHUB_RUN_NUMBER))
+          assembleDebug
+          assembleRelease
 
       - name: Verify and package APKs
         shell: bash
@@ -66,6 +85,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/ButtonSilencer-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/ButtonSilencer-release.apk
           sha256sum dist/*.apk > dist/SHA256SUMS.txt
+          du -h dist/*.apk
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v6

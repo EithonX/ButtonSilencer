@@ -1,56 +1,72 @@
-# Button Silencer v2.4 — media-key blocker + selected-headset volume guard
+# Button Silencer 3.0
 
-This build keeps the working Shizuku privileged media-key listener from v2.3 and adds a screen-off volume guard that targets only one explicitly selected headset input device.
+A compact Android utility that blocks unwanted headset controls without claiming the USB audio interface.
 
-## What it does
+**Developer:** [EithonX](https://github.com/EithonX/)
 
-- Consumes `HEADSETHOOK` and Android `MEDIA_*` events before ordinary media sessions, including while the screen is off.
-- Uses Shizuku's shell process to run Android's read-only `getevent` tool against the selected headset input node.
-- When that selected device reports `VOLUME_UP` or `VOLUME_DOWN`, immediately restores the previous media-volume level.
-- Leaves the phone's own side-volume buttons alone because events from other input devices are ignored.
-- Keeps the Accessibility Service for screen-on filtering and diagnostics.
+## What this build does
 
-## Safety profile
+- Blocks `HEADSETHOOK` and Android media keys through a privileged Shizuku media-key listener.
+- Neutralizes volume-up and volume-down only from the explicitly selected headset/IEM input device.
+- Leaves the phone's own physical volume buttons working.
+- Works with the display on or off on the tested device path.
+- Keeps the previous Accessibility key filter as an optional advanced fallback.
+- Uses no network permission, analytics, ads, account, foreground notification, wake lock, USB-interface claim, or persistent event log.
 
-- No USB-interface claiming.
-- No USB control transfers or audio-driver manipulation.
-- No `EVIOCGRAB`, input-device disable, key-layout replacement, root module, or kernel modification.
-- The `getevent` process blocks while waiting for an event; it does not poll continuously.
-- No wake lock, silent playback, network permission, or media-session playback takeover.
+## Efficiency design
 
-The volume guard is deliberately a **neutralizer**, not a kernel-level hard block. Android may briefly display its volume overlay, and an extremely short volume change may be observable before the previous level is restored. This is safer than exclusively grabbing the input node.
+The privileged input monitor uses Android's blocking `getevent` reader on one selected input node. While no button is pressed, the reader sleeps inside the kernel instead of polling. The media listener and volume-change receiver are callback-driven. The app activity has no periodic refresh loop.
 
-## Requirements and limitations
+The v3 migration pauses the Accessibility fallback by default because the privileged routes now handle the tested screen-on and screen-off cases. It remains available under Advanced settings.
 
-- Android 8.0/API 26 or newer.
-- Shizuku v13+ running with permission granted.
-- The headset must expose its controls as a Linux/Android input device visible to `getevent`.
-- Some DACs change their own hardware volume internally. Android cannot undo a change that never reaches the phone as a key/input event.
-- The app refuses devices whose names look like built-in phone-button devices such as `gpio-keys`, `qpnp`, PMIC/keypad, or side-key devices.
-- If the device path changes after reconnecting, the service attempts to find the same device by name.
+Detailed event logging is disabled by default. When enabled from Advanced settings, Accessibility events are kept only in an in-memory ring buffer for the current process session. The privileged service avoids timestamp/string work while diagnostics are off.
 
 ## Build with GitHub Actions
 
-1. Upload the entire repository, including `.github/workflows/build-apk.yml`.
-2. Run **Build APKs**.
+1. Create a repository and upload the contents of this folder, including `.github`.
+2. Open **Actions** → **Build APKs** → **Run workflow**.
 3. Download the `ButtonSilencer-apks` artifact.
-4. Install `ButtonSilencer-release.apk` for the smaller R8-minified build.
 
-The artifact also contains `ButtonSilencer-debug.apk` and `SHA256SUMS.txt`. Tests and both debug/release lint tasks run before APK assembly.
+The artifact contains:
 
-## Enable and configure
+- `ButtonSilencer-release.apk` — minified and resource-shrunk.
+- `ButtonSilencer-debug.apk` — diagnostic build with a separate `.debug` application ID.
+- `SHA256SUMS.txt`.
 
-1. Start Shizuku.
-2. Open Button Silencer and enable **Shizuku media-key listener**.
-3. Approve Shizuku permission and wait for the media listener to show `ACTIVE`.
-4. Connect the IEM/DAC/headset.
-5. Tap **Scan volume-key input devices**.
-6. Select the USB/IEM/headset entry. Do not select entries marked as likely phone buttons.
-7. Enable **Neutralize volume presses from selected headset**.
-8. Lock the phone and test play/pause and both headset volume buttons.
+Both APKs are signed with the included deterministic **test key** so later workflow builds can install over earlier builds without uninstalling. This is convenient for private testing; replace the signing configuration before public distribution.
 
-The status panel shows the selected device, monitored `/dev/input/event*` path, neutralized-event count, and any permission/device error.
+## First setup
 
-## Signing
+1. Install the release APK.
+2. Start Shizuku.
+3. Open Button Silencer and enable **Headset button protection**.
+4. Grant the Shizuku permission.
+5. Connect the USB DAC/IEM/headset.
+6. Tap **Scan devices** and choose the external headset entry.
+7. Lock the screen and test play/pause plus headset volume controls.
+8. Confirm the phone's own side-volume buttons still work.
 
-Both APKs use the repository's deterministic test key so later Actions builds can update earlier private-test installs. Replace it before any public distribution.
+After a phone or Shizuku restart, reopen Button Silencer once so the daemon UserService can reconnect.
+
+## Advanced settings
+
+Advanced settings allow the two privileged routes to be controlled separately, retain the optional Accessibility fallback rules, and expose manual diagnostics. The app deliberately refuses scan results that look like built-in `gpio-keys`, PMIC, keypad, power-key, or side-key devices.
+
+## Safety model
+
+The headset volume guard reads one `/dev/input/event*` node and restores `STREAM_MUSIC` after a volume press from that node. It does not use `EVIOCGRAB`, modify key-layout files, disable an input device, issue USB control transfers, or claim the USB audio interface. The phone-button device is not monitored.
+
+A brief Android volume-overlay flash may still occur because the volume guard neutralizes the change immediately after the kernel event rather than intercepting the system's volume path before it happens.
+
+## Toolchain
+
+- Android Gradle Plugin 8.13.2
+- Gradle 8.13
+- JDK 17
+- compile/target SDK 36
+- minimum SDK 26
+- Shizuku API/provider 13.1.5
+
+## License
+
+See [LICENSE](LICENSE).

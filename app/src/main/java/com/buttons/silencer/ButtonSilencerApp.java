@@ -8,6 +8,7 @@ public final class ButtonSilencerApp extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        Preferences.applyVersion3Defaults(this);
         shizukuController = new ShizukuController(this);
     }
 

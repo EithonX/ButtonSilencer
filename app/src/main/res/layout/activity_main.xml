@@ -2,6 +2,8 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/background"
+    android:clipToPadding="false"
     android:fillViewport="true">
 
     <LinearLayout
@@ -9,226 +11,469 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="20dp"
-        android:paddingTop="28dp"
+        android:paddingTop="24dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="28dp">
+        android:paddingBottom="36dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/title"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:lineSpacingExtra="2dp"
-            android:text="@string/subtitle"
-            android:textSize="14sp" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:layout_width="wrap_content"
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:contentDescription="@string/app_icon_description"
+                android:src="@mipmap/ic_launcher" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textColor="@color/text_primary"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/tagline"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/versionText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_version_chip"
+                android:paddingStart="10dp"
+                android:paddingTop="5dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="5dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/protectionStatusCard"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="@string/shizuku_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:background="@drawable/bg_status_inactive"
+            android:orientation="vertical"
+            android:padding="18dp">
 
-        <Switch
-            android:id="@+id/privilegedMediaSwitch"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/statusDot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/status_dot"
+                    android:textColor="@color/status_inactive"
+                    android:textSize="22sp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/protectionStatusTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="19sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/protectionStatusDetail"
+                        style="@style/Text.Body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/protectionSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:minHeight="48dp"
+                android:text="@string/protection_switch"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/reconnectShizukuButton"
+                style="@style/Widget.PrimaryButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/connect_shizuku"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="48dp"
-            android:text="@string/privileged_media_blocking" />
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="18dp">
 
-        <Button
-            android:id="@+id/reconnectShizukuButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/reconnect_shizuku" />
+            <TextView
+                style="@style/Text.SectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/headset_device_title" />
+
+            <TextView
+                android:id="@+id/selectedDeviceName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:textColor="@color/text_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/selectedDevicePath"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/headset_device_explanation" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/scanDevicesButton"
+                    style="@style/Widget.PrimaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/scan_devices" />
+
+                <Button
+                    android:id="@+id/forgetDeviceButton"
+                    style="@style/Widget.SecondaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/forget_device" />
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/shizukuStatusText"
+            android:id="@+id/advancedHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:fontFamily="monospace"
-            android:padding="12dp"
-            android:textSize="13sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/shizuku_limitations"
-            android:textSize="13sp"
-            android:textStyle="italic" />
-
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/headset_volume_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/scanVolumeDevicesButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/scan_volume_devices" />
-
-        <Spinner
-            android:id="@+id/volumeDeviceSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="48dp"
-            android:prompt="@string/headset_device_prompt" />
-
-        <Switch
-            android:id="@+id/headsetVolumeGuardSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="48dp"
-            android:text="@string/headset_volume_switch" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/headset_volume_help"
-            android:textSize="13sp"
-            android:textStyle="italic" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/status_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:padding="12dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:textColor="@color/text_primary"
             android:textSize="16sp"
             android:textStyle="bold" />
 
-        <Button
-            android:id="@+id/openAccessibilityButton"
+        <LinearLayout
+            android:id="@+id/advancedContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="@string/open_accessibility" />
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:visibility="gone">
 
-        <Button
-            android:id="@+id/openAppInfoButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/open_app_info" />
+            <TextView
+                style="@style/Text.SectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/privileged_routes_title" />
+
+            <Switch
+                android:id="@+id/mediaListenerSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="48dp"
+                android:text="@string/media_listener_switch" />
+
+            <Switch
+                android:id="@+id/headsetVolumeGuardSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/volume_guard_switch" />
+
+            <TextView
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/privileged_routes_help" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="18dp"
+                android:background="@color/divider" />
+
+            <TextView
+                style="@style/Text.SectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_fallback_title" />
+
+            <TextView
+                android:id="@+id/accessibilityStatus"
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" />
+
+            <Switch
+                android:id="@+id/accessibilityMasterSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:minHeight="48dp"
+                android:text="@string/accessibility_master" />
+
+            <Switch
+                android:id="@+id/accessibilityMediaSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/accessibility_media" />
+
+            <Switch
+                android:id="@+id/accessibilityExternalVolumeSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/accessibility_external_volume" />
+
+            <Switch
+                android:id="@+id/accessibilityAssistCallSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/accessibility_assist_call" />
+
+            <Switch
+                android:id="@+id/accessibilityAllVolumeSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/accessibility_all_volume" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/openAccessibilityButton"
+                    style="@style/Widget.SecondaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/open_accessibility" />
+
+                <Button
+                    android:id="@+id/openAppInfoButton"
+                    style="@style/Widget.SecondaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/open_app_info" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="18dp"
+                android:background="@color/divider" />
+
+            <TextView
+                style="@style/Text.SectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/diagnostics_title" />
+
+            <Switch
+                android:id="@+id/diagnosticLoggingSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:minHeight="48dp"
+                android:text="@string/diagnostic_logging" />
+
+            <TextView
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/diagnostic_logging_help" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/refreshDiagnosticsButton"
+                    style="@style/Widget.SecondaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/refresh_diagnostics" />
+
+                <Button
+                    android:id="@+id/clearDiagnosticsButton"
+                    style="@style/Widget.SecondaryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/clear_diagnostics" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/diagnosticsText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@color/surface_variant"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="2dp"
+                android:padding="12dp"
+                android:text="@string/loading_diagnostics"
+                android:textColor="@color/text_secondary"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
+        </LinearLayout>
 
         <TextView
+            android:id="@+id/aboutHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/restricted_settings_help"
-            android:textSize="13sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/blocking_title"
-            android:textSize="18sp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/bg_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
             android:textStyle="bold" />
 
-        <Switch
-            android:id="@+id/masterSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:minHeight="48dp"
-            android:text="@string/master_blocking" />
-
-        <Switch
-            android:id="@+id/mediaSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/block_media" />
-
-        <Switch
-            android:id="@+id/externalVolumeSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/block_external_volume" />
-
-        <Switch
-            android:id="@+id/assistCallSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/block_assist_call" />
-
-        <Switch
-            android:id="@+id/allVolumeSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/block_all_volume" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/block_all_volume_warning"
-            android:textSize="13sp"
-            android:textStyle="italic" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/events_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/events_help"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/clearEventsButton"
+        <LinearLayout
+            android:id="@+id/aboutContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="@string/clear_events" />
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:visibility="gone">
+
+            <TextView
+                style="@style/Text.SectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/about_title" />
+
+            <TextView
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/about_description" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/developer_label"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/developer_name"
+                android:textColor="@color/text_primary"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/githubButton"
+                style="@style/Widget.PrimaryButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/open_developer_github" />
+
+            <TextView
+                style="@style/Text.Body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/privacy_note" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/eventLogText"
+            style="@style/Text.Body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:fontFamily="monospace"
-            android:lineSpacingExtra="3dp"
-            android:padding="12dp"
-            android:textIsSelectable="true"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:text="@string/footer_note"
             android:textSize="12sp" />
-
     </LinearLayout>
 </ScrollView>

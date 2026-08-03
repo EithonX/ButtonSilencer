@@ -3,7 +3,6 @@ plugins {
 }
 
 def ciVersionCode = (project.findProperty('versionCode') ?: '1').toInteger()
-
 def testKeyStore = file('debug.keystore')
 
 android {
@@ -20,7 +19,7 @@ android {
         minSdk 26
         targetSdk 36
         versionCode ciVersionCode
-        versionName "2.4.${ciVersionCode}"
+        versionName "3.0.${ciVersionCode}"
     }
 
     signingConfigs {
@@ -49,7 +48,6 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-        coreLibraryDesugaringEnabled true
     }
 
     lint {
@@ -61,6 +59,5 @@ android {
 dependencies {
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     testImplementation 'junit:junit:4.13.2'
 }

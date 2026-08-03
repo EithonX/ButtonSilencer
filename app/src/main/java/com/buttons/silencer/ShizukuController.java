@@ -5,17 +5,27 @@ import android.content.Context;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
+
+import java.util.concurrent.CopyOnWriteArraySet;
 
 import rikka.shizuku.Shizuku;
 
 final class ShizukuController {
+    interface Observer {
+        void onControllerStateChanged();
+    }
+
     private static final int REQUEST_CODE = 49021;
     private static final int MIN_PRIVILEGED_API = Build.VERSION_CODES.O;
 
     private final Context context;
     private final Shizuku.UserServiceArgs userServiceArgs;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final CopyOnWriteArraySet<Observer> observers = new CopyOnWriteArraySet<>();
 
     private volatile IPrivilegedBlocker remote;
     private volatile boolean binding;
@@ -31,7 +41,7 @@ final class ShizukuController {
         public void onServiceConnected(ComponentName name, IBinder service) {
             binding = false;
             remote = IPrivilegedBlocker.Stub.asInterface(service);
-            localStatus = "Privileged service connected";
+            setLocalStatus("Privileged service connected");
             applyDesiredState();
         }
 
@@ -39,7 +49,7 @@ final class ShizukuController {
         public void onServiceDisconnected(ComponentName name) {
             binding = false;
             remote = null;
-            localStatus = "Privileged service disconnected";
+            setLocalStatus("Privileged service disconnected");
         }
     };
 
@@ -49,8 +59,8 @@ final class ShizukuController {
                 new ComponentName(this.context, PrivilegedMediaKeyService.class)
         )
                 .daemon(true)
-                .tag("button-silencer-privileged-v3")
-                .processNameSuffix("media_key")
+                .tag("button-silencer-privileged-v4")
+                .processNameSuffix("headset_guard")
                 .debuggable(BuildConfig.DEBUG)
                 .version(BuildConfig.VERSION_CODE);
 
@@ -62,87 +72,174 @@ final class ShizukuController {
             if (Shizuku.pingBinder()) {
                 onBinderReceived();
             }
-        } catch (RuntimeException e) {
-            localStatus = "Shizuku unavailable: " + concise(e);
+        } catch (RuntimeException exception) {
+            setLocalStatus("Shizuku unavailable: " + concise(exception));
+        }
+    }
+
+    void addObserver(Observer observer) {
+        if (observer != null) {
+            observers.add(observer);
+        }
+    }
+
+    void removeObserver(Observer observer) {
+        if (observer != null) {
+            observers.remove(observer);
         }
     }
 
     void requestPermissionOrConnect() {
         if (Build.VERSION.SDK_INT < MIN_PRIVILEGED_API) {
-            localStatus = "Privileged screen-off mode requires Android 8.0 or newer";
+            setLocalStatus("Privileged mode requires Android 8.0 or newer");
             return;
         }
-
         if (!isBinderAlive()) {
-            localStatus = "Start Shizuku, then tap reconnect";
+            setLocalStatus("Start Shizuku, then reconnect");
             return;
         }
 
         try {
             if (Shizuku.isPreV11() || Shizuku.getVersion() < 13) {
-                localStatus = "Shizuku v13 or newer is required";
+                setLocalStatus("Shizuku v13 or newer is required");
                 return;
             }
-
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
                 bindPrivilegedService();
             } else if (Shizuku.shouldShowRequestPermissionRationale()) {
-                localStatus = "Shizuku permission was denied; allow it from the Shizuku app";
+                setLocalStatus("Allow Button Silencer from the Shizuku app");
             } else {
-                localStatus = "Requesting Shizuku permission";
+                setLocalStatus("Requesting Shizuku permission");
                 Shizuku.requestPermission(REQUEST_CODE);
             }
-        } catch (RuntimeException e) {
-            localStatus = "Shizuku request failed: " + concise(e);
+        } catch (RuntimeException exception) {
+            setLocalStatus("Shizuku request failed: " + concise(exception));
         }
     }
 
-    void setPrivilegedEnabled(boolean enabled) {
+    void setProtectionEnabled(boolean enabled) {
         Preferences.putBoolean(context, Preferences.KEY_PRIVILEGED_MEDIA, enabled);
+        String device = Preferences.headsetVolumeDevice(context);
+        Preferences.putBoolean(
+                context,
+                Preferences.KEY_HEADSET_VOLUME_GUARD,
+                enabled && !device.isEmpty()
+        );
+
         if (enabled) {
             requestPermissionOrConnect();
+            IPrivilegedBlocker current = remote;
+            if (current != null) {
+                applyDesiredState();
+            }
         } else {
             stopPrivilegedService();
         }
+        notifyObservers();
     }
 
+    void setMediaListenerEnabled(boolean enabled) {
+        Preferences.putBoolean(context, Preferences.KEY_PRIVILEGED_MEDIA, enabled);
+        IPrivilegedBlocker current = remote;
+        if (enabled && current == null) {
+            requestPermissionOrConnect();
+            return;
+        }
+        if (current != null) {
+            try {
+                current.setEnabled(enabled);
+                setLocalStatus(enabled
+                        ? "Privileged media-key listener enabled"
+                        : "Privileged media-key listener disabled");
+            } catch (RemoteException exception) {
+                remote = null;
+                setLocalStatus("Media listener update failed: " + concise(exception));
+            }
+        }
+        stopServiceIfUnused();
+        notifyObservers();
+    }
 
     String[] listVolumeInputDevices() {
         IPrivilegedBlocker current = remote;
         if (current == null) {
-            localStatus = "Connect Shizuku before scanning input devices";
+            setLocalStatus("Connect Shizuku before scanning input devices");
             return new String[0];
         }
         try {
             return current.listVolumeInputDevices();
-        } catch (RemoteException e) {
+        } catch (RemoteException exception) {
             remote = null;
-            localStatus = "Input-device scan failed: " + concise(e);
+            setLocalStatus("Input-device scan failed: " + concise(exception));
             return new String[0];
         }
     }
 
     void setHeadsetVolumeGuard(String encodedDevice, boolean enabled) {
-        Preferences.putString(context, Preferences.KEY_HEADSET_VOLUME_DEVICE, encodedDevice);
-        Preferences.putBoolean(context, Preferences.KEY_HEADSET_VOLUME_GUARD, enabled);
+        String safeDevice = encodedDevice == null ? "" : encodedDevice;
+        Preferences.putString(context, Preferences.KEY_HEADSET_VOLUME_DEVICE, safeDevice);
+        Preferences.putBoolean(
+                context,
+                Preferences.KEY_HEADSET_VOLUME_GUARD,
+                enabled && !safeDevice.isEmpty()
+        );
 
-        if (enabled && remote == null) {
+        IPrivilegedBlocker current = remote;
+        if (enabled && current == null) {
             requestPermissionOrConnect();
             return;
         }
+        if (current != null) {
+            try {
+                boolean active = current.setHeadsetVolumeGuard(
+                        safeDevice,
+                        enabled && !safeDevice.isEmpty()
+                );
+                setLocalStatus(active
+                        ? "Headset volume guard active"
+                        : (enabled ? "Headset volume guard needs attention"
+                                : "Headset volume guard off"));
+            } catch (RemoteException exception) {
+                remote = null;
+                setLocalStatus("Headset volume guard failed: " + concise(exception));
+            }
+        }
+        stopServiceIfUnused();
+        notifyObservers();
+    }
 
+    void forgetHeadsetDevice() {
+        setHeadsetVolumeGuard("", false);
+    }
+
+    void setDiagnosticLogging(boolean enabled) {
+        Preferences.putBoolean(context, Preferences.KEY_DIAGNOSTIC_LOGGING, enabled);
+        if (!enabled) {
+            EventLogStore.clear(context);
+        }
+        IPrivilegedBlocker current = remote;
+        if (current != null) {
+            try {
+                current.setDiagnosticLogging(enabled);
+            } catch (RemoteException exception) {
+                remote = null;
+                setLocalStatus("Diagnostics update failed: " + concise(exception));
+            }
+        }
+        notifyObservers();
+    }
+
+    int getStateFlags() {
         IPrivilegedBlocker current = remote;
         if (current == null) {
-            return;
+            return 0;
         }
         try {
-            boolean active = current.setHeadsetVolumeGuard(encodedDevice, enabled);
-            localStatus = active
-                    ? "Headset volume guard active"
-                    : (enabled ? "Headset volume guard could not start" : "Headset volume guard off");
-        } catch (RemoteException e) {
+            return current.getStateFlags();
+        } catch (RemoteException exception) {
             remote = null;
-            localStatus = "Headset volume guard failed: " + concise(e);
+            setLocalStatus("Privileged state unavailable: " + concise(exception));
+            return 0;
         }
     }
 
@@ -150,17 +247,19 @@ final class ShizukuController {
         if (Build.VERSION.SDK_INT < MIN_PRIVILEGED_API) {
             return "Unsupported on this Android version";
         }
-
         IPrivilegedBlocker current = remote;
         if (current != null) {
             try {
                 return current.getStatus();
-            } catch (RemoteException e) {
+            } catch (RemoteException exception) {
                 remote = null;
-                localStatus = "Privileged service connection lost: " + concise(e);
+                setLocalStatus("Privileged service connection lost: " + concise(exception));
             }
         }
+        return localStatus;
+    }
 
+    String getLocalStatus() {
         return localStatus;
     }
 
@@ -189,8 +288,8 @@ final class ShizukuController {
     }
 
     private void onBinderReceived() {
-        localStatus = "Shizuku connected";
-        if (Preferences.privilegedMediaEnabled(context)) {
+        setLocalStatus("Shizuku connected");
+        if (Preferences.privilegedProtectionRequested(context)) {
             requestPermissionOrConnect();
         }
     }
@@ -198,7 +297,7 @@ final class ShizukuController {
     private void onBinderDead() {
         binding = false;
         remote = null;
-        localStatus = "Shizuku stopped; reopen Shizuku and reconnect";
+        setLocalStatus("Shizuku stopped; restart it and reconnect");
     }
 
     private void onPermissionResult(int requestCode, int grantResult) {
@@ -206,29 +305,62 @@ final class ShizukuController {
             return;
         }
         if (grantResult == PackageManager.PERMISSION_GRANTED) {
-            localStatus = "Shizuku permission granted";
+            setLocalStatus("Shizuku permission granted");
             bindPrivilegedService();
         } else {
-            localStatus = "Shizuku permission denied";
+            setLocalStatus("Shizuku permission denied");
         }
     }
 
     private synchronized void bindPrivilegedService() {
-        if (remote != null || binding) {
+        if (remote != null) {
             applyDesiredState();
             return;
         }
-
+        if (binding) {
+            return;
+        }
         try {
             binding = true;
-            localStatus = "Starting privileged media-key listener";
+            setLocalStatus("Starting privileged headset guard");
             Shizuku.bindUserService(userServiceArgs, serviceConnection);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException exception) {
             binding = false;
-            localStatus = "Could not start privileged service: " + concise(e);
+            setLocalStatus("Could not start privileged service: " + concise(exception));
         }
     }
 
+    private void applyDesiredState() {
+        IPrivilegedBlocker current = remote;
+        if (current == null) {
+            return;
+        }
+        try {
+            current.setDiagnosticLogging(Preferences.diagnosticLoggingEnabled(context));
+            boolean mediaActive = current.setEnabled(
+                    Preferences.privilegedMediaEnabled(context)
+            );
+            boolean volumeActive = current.setHeadsetVolumeGuard(
+                    Preferences.headsetVolumeDevice(context),
+                    Preferences.headsetVolumeGuardEnabled(context)
+            );
+            if (mediaActive && (volumeActive
+                    || !Preferences.headsetVolumeGuardEnabled(context))) {
+                setLocalStatus("Headset protection active");
+            } else {
+                setLocalStatus("Privileged service connected; check configuration");
+            }
+        } catch (RemoteException exception) {
+            remote = null;
+            setLocalStatus("Privileged service failed: " + concise(exception));
+        }
+    }
+
+    private void stopServiceIfUnused() {
+        if (!Preferences.privilegedProtectionRequested(context)) {
+            stopPrivilegedService();
+        }
+    }
 
     private void stopPrivilegedService() {
         IPrivilegedBlocker current = remote;
@@ -236,8 +368,8 @@ final class ShizukuController {
             try {
                 current.setHeadsetVolumeGuard("", false);
                 current.setEnabled(false);
-            } catch (RemoteException e) {
-                localStatus = "Could not disable privileged blocker: " + concise(e);
+            } catch (RemoteException exception) {
+                setLocalStatus("Could not disable privileged blocker: " + concise(exception));
             }
         }
 
@@ -248,41 +380,31 @@ final class ShizukuController {
                     && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
                 Shizuku.unbindUserService(userServiceArgs, serviceConnection, true);
             }
-            localStatus = "Privileged media-key blocking is off";
-        } catch (RuntimeException e) {
-            localStatus = "Blocking is off; cleanup failed: " + concise(e);
+            setLocalStatus("Privileged headset protection is off");
+        } catch (RuntimeException exception) {
+            setLocalStatus("Protection is off; cleanup failed: " + concise(exception));
         }
     }
 
-    private void applyDesiredState() {
-        IPrivilegedBlocker current = remote;
-        if (current == null) {
+    private void setLocalStatus(String status) {
+        localStatus = status == null ? "" : status;
+        notifyObservers();
+    }
+
+    private void notifyObservers() {
+        if (observers.isEmpty()) {
             return;
         }
-
-        boolean desired = Preferences.privilegedMediaEnabled(context);
-        try {
-            boolean active = current.setEnabled(desired);
-            boolean volumeActive = current.setHeadsetVolumeGuard(
-                    Preferences.headsetVolumeDevice(context),
-                    Preferences.headsetVolumeGuardEnabled(context)
-            );
-            localStatus = active
-                    ? "Privileged media-key listener active"
-                    : "Privileged listener connected but inactive";
-            if (Preferences.headsetVolumeGuardEnabled(context) && !volumeActive) {
-                localStatus += "; headset volume guard needs attention";
+        mainHandler.post(() -> {
+            for (Observer observer : observers) {
+                observer.onControllerStateChanged();
             }
-        } catch (RemoteException e) {
-            remote = null;
-            localStatus = "Privileged service failed: " + concise(e);
-        }
+        });
     }
 
     private static String concise(Throwable throwable) {
         String message = throwable.getMessage();
-        return message == null || message.trim().isEmpty()
-                ? throwable.getClass().getSimpleName()
-                : message;
+        return throwable.getClass().getSimpleName()
+                + (message == null || message.trim().isEmpty() ? "" : ": " + message);
     }
 }

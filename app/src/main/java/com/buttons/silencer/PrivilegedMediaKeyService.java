@@ -22,9 +22,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -69,6 +67,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private volatile boolean enabled;
     private volatile boolean registered;
     private volatile boolean volumeGuardEnabled;
+    private volatile boolean diagnosticLoggingEnabled;
     private volatile boolean volumeGuardActive;
     private volatile String selectedVolumeDevice = "";
     private volatile String selectedResolvedPath = "";
@@ -112,6 +111,37 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     }
 
     @Override
+    public int getStateFlags() {
+        int flags = 0;
+        if (registered) {
+            flags |= PrivilegedState.MEDIA_REGISTERED;
+        }
+        if (enabled && registered) {
+            flags |= PrivilegedState.MEDIA_ENABLED;
+        }
+        if (volumeGuardEnabled) {
+            flags |= PrivilegedState.VOLUME_GUARD_ENABLED;
+        }
+        if (volumeGuardActive) {
+            flags |= PrivilegedState.VOLUME_GUARD_ACTIVE;
+        }
+        if ((enabled && !lastError.isEmpty())
+                || (volumeGuardEnabled && !volumeGuardError.isEmpty())) {
+            flags |= PrivilegedState.HAS_ERROR;
+        }
+        return flags;
+    }
+
+    @Override
+    public void setDiagnosticLogging(boolean requestedEnabled) {
+        diagnosticLoggingEnabled = requestedEnabled;
+        if (!requestedEnabled) {
+            lastEvent = "Detailed media-event logging is off";
+            lastVolumeEvent = "Detailed volume-event logging is off";
+        }
+    }
+
+    @Override
     public String getStatus() {
         StringBuilder builder = new StringBuilder();
         builder.append("Shizuku media listener: ")
@@ -120,8 +150,10 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                 .append('\n');
         builder.append("Process UID: ").append(android.os.Process.myUid()).append('\n');
         builder.append("Blocked media events: ").append(interceptedCount.get()).append('\n');
-        builder.append(lastEvent);
-        if (!lastError.isEmpty()) {
+        builder.append(diagnosticLoggingEnabled
+                ? lastEvent
+                : "Detailed media-event logging is off");
+        if (enabled && !lastError.isEmpty()) {
             builder.append("\nMedia-listener error: ").append(lastError);
         }
 
@@ -139,8 +171,10 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         }
         builder.append("Neutralized volume presses: ")
                 .append(neutralizedVolumeCount.get()).append('\n');
-        builder.append(lastVolumeEvent);
-        if (!volumeGuardError.isEmpty()) {
+        builder.append(diagnosticLoggingEnabled
+                ? lastVolumeEvent
+                : "Detailed volume-event logging is off");
+        if (volumeGuardEnabled && !volumeGuardError.isEmpty()) {
             builder.append("\nVolume-guard error: ").append(volumeGuardError);
         }
         return builder.toString();
@@ -167,8 +201,15 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     @Override
     public boolean setHeadsetVolumeGuard(String encodedDevice, boolean requestedEnabled) {
         synchronized (lock) {
+            String requestedDevice = encodedDevice == null ? "" : encodedDevice;
+            if (requestedEnabled == volumeGuardEnabled
+                    && requestedDevice.equals(selectedVolumeDevice)
+                    && (!requestedEnabled || volumeGuardActive)) {
+                return volumeGuardActive;
+            }
+
             stopVolumeGuardLocked();
-            selectedVolumeDevice = encodedDevice == null ? "" : encodedDevice;
+            selectedVolumeDevice = requestedDevice;
             volumeGuardEnabled = requestedEnabled;
             if (requestedEnabled) {
                 startVolumeGuardLocked();
@@ -392,11 +433,13 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         }
 
         int count = neutralizedVolumeCount.incrementAndGet();
-        String direction = eventLine.contains("KEY_VOLUMEUP") ? "VOLUME_UP" : "VOLUME_DOWN";
-        String time = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
-                .format(new Date());
-        lastVolumeEvent = time + "  NEUTRALIZING " + direction
-                + "\n" + device.name + "  count=" + count;
+        if (diagnosticLoggingEnabled) {
+            String direction = eventLine.contains("KEY_VOLUMEUP")
+                    ? "VOLUME_UP"
+                    : "VOLUME_DOWN";
+            lastVolumeEvent = "NEUTRALIZING " + direction
+                    + "\n" + device.name + "  count=" + count;
+        }
 
         restoreVolumeLater(manager, targetVolume, 25L);
         restoreVolumeLater(manager, targetVolume, 90L);
@@ -580,14 +623,13 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         boolean blocked = enabled && mediaKey;
         if (mediaKey) {
             int count = interceptedCount.incrementAndGet();
-            String time = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
-                    .format(new Date());
-            lastEvent = time
-                    + "  " + (blocked ? "BLOCKED" : "PASSED")
-                    + "  " + actionName(event.getAction())
-                    + "\n" + KeyEvent.keyCodeToString(event.getKeyCode())
-                    + " (" + event.getKeyCode() + ")"
-                    + "  count=" + count;
+            if (diagnosticLoggingEnabled) {
+                lastEvent = (blocked ? "BLOCKED" : "PASSED")
+                        + "  " + actionName(event.getAction())
+                        + "\n" + KeyEvent.keyCodeToString(event.getKeyCode())
+                        + " (" + event.getKeyCode() + ")"
+                        + "  count=" + count;
+            }
         }
         return blocked;
     }

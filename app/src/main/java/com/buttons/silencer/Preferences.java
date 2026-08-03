@@ -14,12 +14,27 @@ final class Preferences {
     static final String KEY_PRIVILEGED_MEDIA = "privileged_media_enabled";
     static final String KEY_HEADSET_VOLUME_GUARD = "headset_volume_guard_enabled";
     static final String KEY_HEADSET_VOLUME_DEVICE = "headset_volume_device";
+    static final String KEY_DIAGNOSTIC_LOGGING = "diagnostic_logging_enabled";
+    private static final String KEY_V3_DEFAULTS_APPLIED = "v3_defaults_applied";
 
     private Preferences() {
     }
 
     private static SharedPreferences prefs(Context context) {
         return context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE);
+    }
+
+
+    static void applyVersion3Defaults(Context context) {
+        SharedPreferences preferences = prefs(context);
+        if (preferences.contains(KEY_V3_DEFAULTS_APPLIED)) {
+            return;
+        }
+        preferences.edit()
+                .putBoolean(KEY_MASTER, false)
+                .putBoolean(KEY_DIAGNOSTIC_LOGGING, false)
+                .putBoolean(KEY_V3_DEFAULTS_APPLIED, true)
+                .apply();
     }
 
     static boolean isMasterEnabled(Context context) {
@@ -51,7 +66,16 @@ final class Preferences {
     }
 
     static String headsetVolumeDevice(Context context) {
-        return prefs(context).getString(KEY_HEADSET_VOLUME_DEVICE, "");
+        String value = prefs(context).getString(KEY_HEADSET_VOLUME_DEVICE, "");
+        return value == null ? "" : value;
+    }
+
+    static boolean diagnosticLoggingEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_DIAGNOSTIC_LOGGING, false);
+    }
+
+    static boolean privilegedProtectionRequested(Context context) {
+        return privilegedMediaEnabled(context) || headsetVolumeGuardEnabled(context);
     }
 
     static void putBoolean(Context context, String key, boolean value) {

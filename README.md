@@ -1,5 +1,10 @@
 # Button Silencer
 
+## Build-fix note
+
+This revision fixes the API-level lint failure from the first repository: `InputDevice.isExternal()` is now called only on Android 10/API 29 or newer, while Android 6–9 use the existing conservative name/descriptor fallback. It also removes a deprecated key-action reference and makes CI run tests/lint before spending time assembling the APK.
+
+
 Button Silencer is a small Android app that uses an Accessibility Service to consume selected headset/media key events before normal apps handle them. It is designed as a safer replacement for USB-interface claiming.
 
 ## What this build does

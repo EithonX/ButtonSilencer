@@ -133,7 +133,7 @@ public final class MainActivity extends Activity {
                 ? R.string.blocking_active
                 : R.string.blocking_paused);
 
-        statusText.setText(serviceState + "\n" + blockingState);
+        statusText.setText(getString(R.string.status_format, serviceState, blockingState));
         statusText.setAlpha(serviceEnabled ? 1.0f : 0.65f);
         eventLogText.setText(EventLogStore.formatForDisplay(this));
     }

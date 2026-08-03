@@ -160,8 +160,6 @@ final class EventLogStore {
                 return "DOWN";
             case KeyEvent.ACTION_UP:
                 return "UP";
-            case KeyEvent.ACTION_MULTIPLE:
-                return "MULTIPLE";
             default:
                 return Integer.toString(action);
         }

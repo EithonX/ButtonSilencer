@@ -43,8 +43,11 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Run unit tests, lint, and build debug APK
-        run: gradle --no-daemon --stacktrace -PversionCode=${{ github.run_number }} clean testDebugUnitTest lintDebug assembleDebug
+      - name: Run unit tests and Android lint
+        run: gradle --no-daemon --stacktrace -PversionCode=${{ github.run_number }} clean testDebugUnitTest lintDebug
+
+      - name: Build debug APK
+        run: gradle --no-daemon --stacktrace -PversionCode=${{ github.run_number }} assembleDebug
 
       - name: Prepare installable APK
         shell: bash

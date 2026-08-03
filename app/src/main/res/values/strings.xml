@@ -25,4 +25,5 @@
     <string name="service_disabled">Disabled</string>
     <string name="blocking_active">Blocking active</string>
     <string name="blocking_paused">Blocking paused; recognized keys are only logged</string>
+    <string name="status_format">%1$s\n%2$s</string>
 </resources>

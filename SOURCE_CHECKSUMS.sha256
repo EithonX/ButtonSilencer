@@ -1,9 +1,8 @@
-f521438f65397c8c4041301fe08e05d72b550f2089b164b633eaa87e6bf8355a  ./.github/workflows/build-apk.yml
+a011fde6f8f488ca38b3abce1222033a3e8e0f343b03eb88b995e3d19e46ba04  ./.github/workflows/build-apk.yml
 442690e03367bec013f6b8c7fd5d06f3673552c3c8b64c1185a0679a92e5cfda  ./.gitignore
 c158adb4c13be2b5ad663ae5b365d66994f9698275758156480fa12b12b3dd7a  ./LICENSE
-f02a06b4539ce48c00182b41171da471879376335270cb97c8026c9ab4cf2693  ./README.md
-9d4b08e6a085ad942a43766e24928a0f55050c4d6ae372ae8154e854dea82138  ./app/build.gradle
-5169336eeb4b35a24f4462c6c7bd2f6e3353b2a5821307e8687971a830765fad  ./app/debug.keystore
+3ad1721f8e515e158c89fd338b8a18eb547b3733ea186cdda3792b3db1568ce6  ./README.md
+0c2e4adf279b88915da9c9aac853fe6532fef2e5656deff901f39e76b16c119d  ./app/build.gradle
 48792f065991d78ec21af32cdfa3dfe31157da2bb068adae1a3e93da8d532146  ./app/proguard-rules.pro
 e2b332e9403fe96b41b87fef6beea60059f041a53f21bad85d9f3ef812a26deb  ./app/src/main/AndroidManifest.xml
 d2054598c203dd59daf11734bf7eb35faecb3b9146093446cb788b151af38670  ./app/src/main/aidl/com/buttons/silencer/IPrivilegedBlocker.aidl
@@ -26,5 +25,5 @@ d9839dcd19cabe36d87d9495f0cf46a772f38a4f6256d5d14870de56f9b5e7b0  ./app/src/test
 73fe4019803b5e65e9832e2d14b623135b04ede1df035eaa20db81ec9f56f9ea  ./app/src/test/java/com/buttons/silencer/PrivilegedKeyPolicyTest.java
 6844d442e0ae87ec0b784c8afe5598878784c4fa41aced1e9389a9b3bfb25666  ./build.gradle
 84ddda95bcb24d32c132b4677f3703dbdcfd7119173cb93d1fc7f7b2d9600307  ./gradle.properties
-5ac632006fce8c01d6c4be2a8815e29703de8b8e707e440101e83bc6a8174470  ./scripts/check-project-config.sh
+4a901fad917adbede582f2fa8042ee63bea8fde379a7ae3a9f3a68f953fd0a89  ./scripts/check-project-config.sh
 b34e07a4c1da9c2209493e204983dc49366cdf645193e9938026048b9e003295  ./settings.gradle

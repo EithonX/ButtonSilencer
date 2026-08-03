@@ -23,7 +23,8 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Check project configuration
-        run: ./scripts/check-project-config.sh
+        shell: bash
+        run: bash scripts/check-project-config.sh
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5

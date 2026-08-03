@@ -22,6 +22,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      - name: Check project configuration
+        run: ./scripts/check-project-config.sh
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -43,8 +46,11 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Preflight manifests and AIDL
+        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) clean :app:processDebugMainManifest :app:processReleaseMainManifest :app:compileDebugAidl :app:compileReleaseAidl
+
       - name: Run unit tests and lint
-        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) clean testDebugUnitTest lintDebug lintRelease
+        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) testDebugUnitTest lintDebug lintRelease
 
       - name: Build signed debug and minified release APKs
         run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) assembleDebug assembleRelease

@@ -1,4 +1,4 @@
-# Button Silencer — Shizuku privileged media-key build
+# Button Silencer — Shizuku privileged media-key build v2.1
 
 This revision replaces the unreliable screen-off Accessibility-only design with Android's privileged media-key listener through a Shizuku UserService.
 
@@ -19,7 +19,7 @@ This is much lower risk than claiming a USB audio/HID interface. It still cannot
 
 ## Important limitations
 
-- Requires Android 8.0/API 26 or newer for the privileged listener.
+- Requires Android 8.0/API 26 or newer. The project now declares minSdk 26 because the privileged listener requires it and Shizuku 13.1.5 itself requires at least API 24.
 - Requires Shizuku v13+ and Shizuku permission.
 - Shizuku must be running. After a phone or Shizuku restart, reopen Button Silencer and reconnect.
 - This privileged listener handles media keys, not ordinary `VOLUME_UP`/`VOLUME_DOWN` presses.
@@ -49,3 +49,9 @@ Both APKs are signed with the repository's deterministic test key so Actions can
 6. Lock the phone and test the IEM media/headset button.
 
 The privileged status box shows the latest received media key and whether it was blocked.
+
+
+## v2.1 build correction
+
+- Project `minSdk` is now API 26, matching the actual privileged-listener requirement and exceeding Shizuku 13.1.5's API 24 minimum.
+- GitHub Actions now runs manifest and AIDL preflight tasks before tests, lint, and APK assembly.

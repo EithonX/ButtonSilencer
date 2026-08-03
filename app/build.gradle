@@ -17,10 +17,10 @@ android {
 
     defaultConfig {
         applicationId 'com.buttons.silencer'
-        minSdk 24
+        minSdk 26
         targetSdk 36
         versionCode ciVersionCode
-        versionName "2.0.${ciVersionCode}"
+        versionName "2.1.${ciVersionCode}"
     }
 
     signingConfigs {

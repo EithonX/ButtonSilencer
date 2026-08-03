@@ -1,79 +1,51 @@
-# Button Silencer
+# Button Silencer — Shizuku privileged media-key build
 
-## Build-fix note
+This revision replaces the unreliable screen-off Accessibility-only design with Android's privileged media-key listener through a Shizuku UserService.
 
-This revision fixes the API-level lint failure from the first repository: `InputDevice.isExternal()` is now called only on Android 10/API 29 or newer, while Android 6–9 use the existing conservative name/descriptor fallback. It also removes a deprecated key-action reference and makes CI run tests/lint before spending time assembling the APK.
+## Why this route
 
+Android's hidden `MediaSessionManager.setOnMediaKeyListener()` receives media keys before normal media sessions. If the listener returns `true`, the event is consumed. The permission is privileged, but Android's shell package holds it, so a Shizuku UserService running as shell can register the listener without claiming the USB interface.
 
-Button Silencer is a small Android app that uses an Accessibility Service to consume selected headset/media key events before normal apps handle them. It is designed as a safer replacement for USB-interface claiming.
+## Safety profile
 
-## What this build does
+- No USB device/interface ownership.
+- No raw USB transfers.
+- No root requirement; normal Shizuku ADB mode is sufficient on Android builds where shell has `SET_MEDIA_KEY_LISTENER`.
+- No foreground service, silent audio, wake lock, network permission, background polling, or media-session playback takeover. The status panel refreshes only while the app screen is open.
+- While enabled, the privileged process sleeps until Android sends a media-key event. Disabling the switch unregisters the listener and stops that UserService process.
+- The listener only returns `true` for `HEADSETHOOK` and Android `MEDIA_*` key codes.
 
-- Blocks headset hook and Android media keys.
-- Blocks volume keys reported by an external input device by default.
-- Optionally blocks assistant/call keys.
-- Has an explicit dangerous option to block volume keys from every device, including the phone's own side buttons.
-- Logs only recognized headset/media/volume/assistant/call events. It does not log keyboard typing or inspect screen contents.
-- Records whether the screen was on or off, the key code, scan code, input-device details, and whether the event was consumed.
+This is much lower risk than claiming a USB audio/HID interface. It still cannot be guaranteed that an OEM framework bug will never crash, but this code uses a system media-service listener rather than a hardware driver path.
 
-## What it deliberately does not do
+## Important limitations
 
-- No USB device or interface claiming.
-- No Shizuku, root, ADB privilege, hidden API, or device-owner requirement.
-- No MediaSession takeover that could steal playback ownership from the actual music player.
-- No foreground service, wake lock, network permission, analytics, advertising, or background polling.
+- Requires Android 8.0/API 26 or newer for the privileged listener.
+- Requires Shizuku v13+ and Shizuku permission.
+- Shizuku must be running. After a phone or Shizuku restart, reopen Button Silencer and reconnect.
+- This privileged listener handles media keys, not ordinary `VOLUME_UP`/`VOLUME_DOWN` presses.
+- Accessibility remains included as a separate fallback for screen-on media/assistant/call keys and external volume keys.
+- Android supports only one global media-key listener. Another privileged/Shizuku app using the same listener can replace this one.
 
-The Accessibility Service remains system-managed and does work only when Android sends a key event. The activity refreshes its event display only while it is open.
+## Build with GitHub Actions
 
-## Build the APK with GitHub Actions
+1. Upload the entire repository, including `.github/workflows/build-apk.yml`.
+2. Run **Build APKs** from GitHub Actions.
+3. Download the `ButtonSilencer-apks` artifact.
+4. Install `ButtonSilencer-release.apk` for the smaller R8-minified build. The debug and release variants use different package IDs, so uninstall the old debug build first if you do not want two app icons.
 
-1. Create an empty GitHub repository.
-2. Upload every file and folder from this repository, including `.github/workflows/build-apk.yml`.
-3. Commit to `main` or `master`.
-4. Open the repository's **Actions** tab.
-5. Select **Build APK**, then choose **Run workflow**. A push to `main` or `master` also starts the build automatically.
-6. Open the finished workflow run and download the **ButtonSilencer-debug-apk** artifact.
-7. Extract it and install `ButtonSilencer-debug.apk`.
+The workflow also builds `ButtonSilencer-debug.apk`, runs unit tests, runs debug and release lint, verifies both APK signatures, and writes SHA-256 checksums.
 
-The workflow uses JDK 17, Gradle 8.13, Android Gradle Plugin 8.13.2, compile/target SDK 36, Android Build Tools 35.0.0, unit tests, Android lint, and debug APK assembly. The debug APK is signed with the repository's test-only debug keystore and is directly installable. Because the key is deterministic and the workflow uses its increasing run number as the Android version code, APKs from later workflow runs can update earlier builds instead of failing with a signature or downgrade error. Do not use this public debug key for a production release.
+## Release signing note
 
-## Enable and test
+Both APKs are signed with the repository's deterministic test key so Actions can produce directly installable APKs and later builds can update earlier ones. This is appropriate for private testing, not Play Store or public production distribution.
 
-1. Open Button Silencer.
-2. Tap **Open Accessibility settings**.
-3. Find **Button Silencer key filter** and enable it.
-4. On Android 13 or newer, a sideloaded APK may show a disabled service switch. Open **App info**, use the top-right menu, choose **Allow restricted settings**, then return to Accessibility settings.
-5. Leave **Blocking enabled**, **Block headset and media keys**, and **Block volume keys from external devices** enabled.
-6. Press every IEM button with the screen on.
-7. Lock the phone and repeat the same test with the screen off.
-8. Reopen the app and inspect the event list.
+## Enable
 
-Interpretation:
+1. Start Shizuku and verify it says it is running.
+2. Open Button Silencer.
+3. Enable **Shizuku media-key listener**.
+4. Approve the permission request in Shizuku.
+5. Wait for the status to show `ACTIVE`.
+6. Lock the phone and test the IEM media/headset button.
 
-- `BLOCKED` means Android delivered the key to the Accessibility Service and the service returned `true` to consume it.
-- `PASSED` means the key was recognized but its blocking rule was disabled.
-- `screen=OFF` confirms that Android delivered that event while the display was non-interactive.
-- `external=false` on a USB/IEM volume key means the phone's input stack did not identify it as external. Enable **Block volume keys from every device** only for testing, because that also blocks the phone's hardware volume buttons.
-- No event at all means the DAC, kernel driver, OEM firmware, telephony stack, or another higher-priority component handled the button before this normal app could receive it.
-
-## Important Android limitations
-
-Android can grant key-event filtering to an Accessibility Service, but behavior still depends on the device firmware and input-driver mapping. Some call controls, voice-assistant gestures, analog headset remotes, and USB audio controls may be intercepted before an Accessibility Service sees them.
-
-If multiple enabled Accessibility Services request key-event filtering, Android may deliver the event to only one of them. Temporarily disable other services that filter hardware keys when testing.
-
-This repository can prove whether the method works for the exact IEM/phone combination without the crash risk of taking ownership of a USB interface.
-
-## Repository layout
-
-- `app/src/main/java/com/buttons/silencer/ButtonBlockerService.java` — key interception and consumption.
-- `app/src/main/java/com/buttons/silencer/ButtonPolicy.java` — deterministic blocking policy.
-- `app/src/main/java/com/buttons/silencer/DeviceClassifier.java` — conservative external-device detection.
-- `app/src/main/java/com/buttons/silencer/EventLogStore.java` — private rolling diagnostic log.
-- `app/src/main/java/com/buttons/silencer/MainActivity.java` — settings and diagnostics UI.
-- `app/src/test/.../ButtonPolicyTest.java` — unit tests for the safety-critical blocking rules.
-- `.github/workflows/build-apk.yml` — reproducible APK build and artifact upload.
-
-## Package name
-
-The debug build installs as `com.buttons.silencer.debug`. This avoids conflicts with any earlier Button Silencer APK that used another signing key or package.
+The privileged status box shows the latest received media key and whether it was blocked.

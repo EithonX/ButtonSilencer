@@ -11,6 +11,7 @@ final class Preferences {
     static final String KEY_EXTERNAL_VOLUME = "block_external_volume";
     static final String KEY_ASSIST_CALL = "block_assist_call";
     static final String KEY_ALL_VOLUME = "block_all_volume";
+    static final String KEY_PRIVILEGED_MEDIA = "privileged_media_enabled";
 
     private Preferences() {
     }
@@ -37,6 +38,10 @@ final class Preferences {
 
     static boolean blockAllVolume(Context context) {
         return prefs(context).getBoolean(KEY_ALL_VOLUME, false);
+    }
+
+    static boolean privilegedMediaEnabled(Context context) {
+        return prefs(context).getBoolean(KEY_PRIVILEGED_MEDIA, false);
     }
 
     static void putBoolean(Context context, String key, boolean value) {

@@ -22,12 +22,15 @@ public final class MainActivity extends Activity {
     private final Handler refreshHandler = new Handler(Looper.getMainLooper());
 
     private TextView statusText;
+    private TextView shizukuStatusText;
     private TextView eventLogText;
     private Switch masterSwitch;
     private Switch mediaSwitch;
     private Switch externalVolumeSwitch;
     private Switch assistCallSwitch;
     private Switch allVolumeSwitch;
+    private Switch privilegedMediaSwitch;
+    private ShizukuController shizukuController;
 
     private final Runnable refreshRunnable = new Runnable() {
         @Override
@@ -42,14 +45,19 @@ public final class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        shizukuController = ((ButtonSilencerApp) getApplication()).getShizukuController();
+
         statusText = findViewById(R.id.statusText);
+        shizukuStatusText = findViewById(R.id.shizukuStatusText);
         eventLogText = findViewById(R.id.eventLogText);
         masterSwitch = findViewById(R.id.masterSwitch);
         mediaSwitch = findViewById(R.id.mediaSwitch);
         externalVolumeSwitch = findViewById(R.id.externalVolumeSwitch);
         assistCallSwitch = findViewById(R.id.assistCallSwitch);
         allVolumeSwitch = findViewById(R.id.allVolumeSwitch);
+        privilegedMediaSwitch = findViewById(R.id.privilegedMediaSwitch);
 
+        Button reconnectShizukuButton = findViewById(R.id.reconnectShizukuButton);
         Button openAccessibilityButton = findViewById(R.id.openAccessibilityButton);
         Button openAppInfoButton = findViewById(R.id.openAppInfoButton);
         Button clearEventsButton = findViewById(R.id.clearEventsButton);
@@ -57,18 +65,16 @@ public final class MainActivity extends Activity {
         loadSwitchValues();
         attachSwitchListeners();
 
-        openAccessibilityButton.setOnClickListener(view -> {
-            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            startActivity(intent);
-        });
+        reconnectShizukuButton.setOnClickListener(view ->
+                shizukuController.requestPermissionOrConnect());
 
-        openAppInfoButton.setOnClickListener(view -> {
-            Intent intent = new Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:" + getPackageName())
-            );
-            startActivity(intent);
-        });
+        openAccessibilityButton.setOnClickListener(view ->
+                startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+
+        openAppInfoButton.setOnClickListener(view -> startActivity(new Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName())
+        )));
 
         clearEventsButton.setOnClickListener(view -> {
             EventLogStore.clear(this);
@@ -81,6 +87,9 @@ public final class MainActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        if (Preferences.privilegedMediaEnabled(this)) {
+            shizukuController.requestPermissionOrConnect();
+        }
         refreshHandler.removeCallbacks(refreshRunnable);
         refreshHandler.post(refreshRunnable);
     }
@@ -97,6 +106,7 @@ public final class MainActivity extends Activity {
         externalVolumeSwitch.setChecked(Preferences.blockExternalVolume(this));
         assistCallSwitch.setChecked(Preferences.blockAssistCall(this));
         allVolumeSwitch.setChecked(Preferences.blockAllVolume(this));
+        privilegedMediaSwitch.setChecked(Preferences.privilegedMediaEnabled(this));
     }
 
     private void attachSwitchListeners() {
@@ -120,6 +130,14 @@ public final class MainActivity extends Activity {
                 Toast.makeText(this, R.string.block_all_volume_warning, Toast.LENGTH_LONG).show();
             }
         });
+
+        privilegedMediaSwitch.setOnCheckedChangeListener((button, checked) -> {
+            shizukuController.setPrivilegedEnabled(checked);
+            if (checked) {
+                Toast.makeText(this, R.string.shizuku_enable_hint, Toast.LENGTH_LONG).show();
+            }
+            refreshStatusAndLog();
+        });
     }
 
     private void refreshStatusAndLog() {
@@ -135,6 +153,7 @@ public final class MainActivity extends Activity {
 
         statusText.setText(getString(R.string.status_format, serviceState, blockingState));
         statusText.setAlpha(serviceEnabled ? 1.0f : 0.65f);
+        shizukuStatusText.setText(shizukuController.getStatus());
         eventLogText.setText(EventLogStore.formatForDisplay(this));
     }
 

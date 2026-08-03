@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APKs
 
 on:
   workflow_dispatch:
@@ -43,23 +43,27 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Run unit tests and Android lint
-        run: gradle --no-daemon --stacktrace -PversionCode=${{ github.run_number }} clean testDebugUnitTest lintDebug
+      - name: Run unit tests and lint
+        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) clean testDebugUnitTest lintDebug lintRelease
 
-      - name: Build debug APK
-        run: gradle --no-daemon --stacktrace -PversionCode=${{ github.run_number }} assembleDebug
+      - name: Build signed debug and minified release APKs
+        run: gradle --no-daemon --stacktrace -PversionCode=$((200000 + GITHUB_RUN_NUMBER)) assembleDebug assembleRelease
 
-      - name: Prepare installable APK
+      - name: Verify and package APKs
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/ButtonSilencer-debug.apk
-          sha256sum dist/ButtonSilencer-debug.apk > dist/ButtonSilencer-debug.apk.sha256
+          cp app/build/outputs/apk/release/app-release.apk dist/ButtonSilencer-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/ButtonSilencer-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/ButtonSilencer-release.apk
+          sha256sum dist/*.apk > dist/SHA256SUMS.txt
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: ButtonSilencer-debug-apk
+          name: ButtonSilencer-apks
           path: dist/
           if-no-files-found: error
           retention-days: 30

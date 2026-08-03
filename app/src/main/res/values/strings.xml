@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Button Silencer</string>
+    <string name="service_name">Button Silencer key filter</string>
+    <string name="accessibility_service_description">Blocks selected headset, media, call, assistant, and external volume key events. It does not read screen contents or typed text.</string>
+
+    <string name="title">Button Silencer</string>
+    <string name="subtitle">Safe, event-driven headset button filtering. No USB claiming, root, Shizuku, network access, foreground service, or polling while the app is closed.</string>
+    <string name="status_title">Service status</string>
+    <string name="open_accessibility">Open Accessibility settings</string>
+    <string name="open_app_info">Open app info</string>
+    <string name="restricted_settings_help">Android 13+: if the service switch is greyed out, open App info, tap the top-right menu, and choose “Allow restricted settings”.</string>
+    <string name="blocking_title">Blocking rules</string>
+    <string name="master_blocking">Blocking enabled</string>
+    <string name="block_media">Block headset and media keys</string>
+    <string name="block_external_volume">Block volume keys from external devices</string>
+    <string name="block_assist_call">Block assistant and call keys</string>
+    <string name="block_all_volume">Block volume keys from every device</string>
+    <string name="block_all_volume_warning">Warning: this also disables the phone’s own volume buttons while the accessibility service is enabled.</string>
+    <string name="events_title">Recent recognized button events</string>
+    <string name="events_help">Press the IEM buttons with the screen on and off. A BLOCKED entry means Android delivered the event and the service consumed it. If nothing appears, firmware or the USB device handled it before a normal app could see it.</string>
+    <string name="clear_events">Clear event log</string>
+    <string name="no_events">No recognized headset, media, volume, assistant, or call key events recorded yet.</string>
+    <string name="service_enabled">Enabled</string>
+    <string name="service_disabled">Disabled</string>
+    <string name="blocking_active">Blocking active</string>
+    <string name="blocking_paused">Blocking paused; recognized keys are only logged</string>
+</resources>

@@ -47,7 +47,7 @@ checks = {
     'CI captures full Gradle log': 'tee .ci/gradle.log' in workflow and '.ci/gradle.log' in workflow,
     'APK alignment verification': 'zipalign' in workflow and '-P 16 -v 4' in workflow,
     'APK signature verification': 'apksigner' in workflow,
-    '3.1.5 CI version base': '315000 + GITHUB_RUN_NUMBER' in workflow,
+    '3.1.6 CI version base': '316000 + GITHUB_RUN_NUMBER' in workflow,
     'JNI class preserved for release': 'com.buttons.silencer.EvdevExclusiveGuard' in proguard_path.read_text(encoding='utf-8'),
     'obsolete audio mutation permission removed': 'android.permission.MODIFY_AUDIO_SETTINGS' not in manifest_path.read_text(encoding='utf-8'),
 }
@@ -159,6 +159,24 @@ for path in sorted(res_root.glob('values*/**/*.xml')):
                 )
 
 service = service_path.read_text(encoding='utf-8')
+# android.system.Os.read/write both declare InterruptedIOException in the real Android SDK.
+# Our earlier lightweight javac stubs omitted it, which allowed 3.1.5 to pass local compilation
+# while Android javac correctly rejected the unchecked exception. Keep this guard close to source.
+if 'import java.io.InterruptedIOException;' not in service:
+    raise SystemExit('Android Os regression: InterruptedIOException import missing')
+reader_start_for_io = service.find('private void drainGrabbedInput(GrabbedInput input)')
+reader_end_for_io = service.find('private static String joinPaths', reader_start_for_io)
+release_start_for_io = service.find('private static void releaseInputs(List<GrabbedInput> inputs)')
+release_end_for_io = service.find('private static void closeQuietly', release_start_for_io)
+if min(reader_start_for_io, reader_end_for_io, release_start_for_io, release_end_for_io) < 0:
+    raise SystemExit('Android Os regression: raw-input methods not found')
+reader_io = service[reader_start_for_io:reader_end_for_io]
+release_io = service[release_start_for_io:release_end_for_io]
+if 'Os.read(' not in reader_io or 'catch (ErrnoException | InterruptedIOException exception)' not in reader_io:
+    raise SystemExit('Android Os regression: Os.read must handle InterruptedIOException')
+if 'Os.write(' not in release_io or 'catch (ErrnoException | InterruptedIOException ignored)' not in release_io:
+    raise SystemExit('Android Os regression: Os.write must handle InterruptedIOException')
+
 for required_text in (
     'initializeMediaFrameworkIfNeeded();',
     'android.media.MediaFrameworkPlatformInitializer',

@@ -17,6 +17,7 @@ import android.view.KeyEvent;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
@@ -600,7 +601,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                     break;
                 }
             }
-        } catch (ErrnoException exception) {
+        } catch (ErrnoException | InterruptedIOException exception) {
             failure = concise(exception);
         }
 
@@ -650,7 +651,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             // a dead/old fd. This is also why the guard can stay battery-idle when no buttons fire.
             try {
                 Os.write(input.cancelWrite.getFileDescriptor(), wake, 0, wake.length);
-            } catch (ErrnoException ignored) {
+            } catch (ErrnoException | InterruptedIOException ignored) {
                 // Closing the pipe below also makes a waiting poll return.
             }
 

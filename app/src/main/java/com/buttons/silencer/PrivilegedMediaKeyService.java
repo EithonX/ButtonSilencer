@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.session.MediaSessionManager;
 import android.os.Build;
+import android.os.FileObserver;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.SystemClock;
@@ -24,9 +25,9 @@ import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Runs in a Shizuku UserService process under shell/root identity.
@@ -40,15 +41,24 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private static final String LISTENER_CLASS_NAME =
             "android.media.session.MediaSessionManager$OnMediaKeyListener";
     private static final String GETEVENT = "/system/bin/getevent";
+    private static final String INPUT_DIR = "/dev/input";
+    private static final long[] MEDIA_RECOVERY_DELAYS_MS = {750L, 2_000L, 5_000L};
+    private static final long[] VOLUME_RECOVERY_DELAYS_MS = {750L, 2_500L, 8_000L, 30_000L};
     private static final String VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION";
     private static final String EXTRA_VOLUME_STREAM_TYPE =
             "android.media.EXTRA_VOLUME_STREAM_TYPE";
     private static final String EXTRA_VOLUME_STREAM_VALUE =
             "android.media.EXTRA_VOLUME_STREAM_VALUE";
+    private static final String RAW_VOLUME_DOWN_PRESS = "0001 0072 00000001";
+    private static final String RAW_VOLUME_UP_PRESS = "0001 0073 00000001";
 
     private final Object lock = new Object();
     private final HandlerThread callbackThread;
     private final Handler callbackHandler;
+    private final Runnable mediaRecoveryRunnable;
+    private final Runnable volumeRecoveryRunnable;
+    private final Runnable volumeRestoreRunnable;
+    private final Runnable volumeRestoreFinishRunnable;
     private final AtomicInteger interceptedCount = new AtomicInteger();
     private final AtomicInteger neutralizedVolumeCount = new AtomicInteger();
 
@@ -61,8 +71,15 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private Process volumeMonitorProcess;
     private Thread volumeMonitorThread;
     private BroadcastReceiver volumeReceiver;
+    private FileObserver inputObserver;
     private int stableMediaVolume = -1;
+    private int pendingRestoreVolume = -1;
     private long suppressVolumeUpdatesUntil;
+    private boolean volumeRestoreCycleScheduled;
+    private int mediaRecoveryAttempt;
+    private int volumeRecoveryAttempt;
+    private boolean mediaRecoveryScheduled;
+    private boolean volumeRecoveryScheduled;
 
     private volatile boolean enabled;
     private volatile boolean registered;
@@ -73,6 +90,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private volatile String selectedResolvedPath = "";
     private volatile String lastError = "";
     private volatile String volumeGuardError = "";
+    private volatile String volumeGuardWarning = "";
     private volatile String lastEvent = "No privileged media-key event received yet";
     private volatile String lastVolumeEvent = "No selected-headset volume event received yet";
 
@@ -87,6 +105,10 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         callbackThread = new HandlerThread("ButtonSilencerPrivileged");
         callbackThread.start();
         callbackHandler = new Handler(callbackThread.getLooper());
+        mediaRecoveryRunnable = this::recoverMediaListener;
+        volumeRecoveryRunnable = this::recoverVolumeGuard;
+        volumeRestoreRunnable = () -> restorePendingVolume(false);
+        volumeRestoreFinishRunnable = () -> restorePendingVolume(true);
     }
 
     @Override
@@ -97,8 +119,12 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                 if (!registered) {
                     registerListenerLocked();
                 }
+                if (!registered) {
+                    scheduleMediaRecoveryLocked();
+                }
             } else {
                 enabled = false;
+                cancelMediaRecoveryLocked();
                 unregisterListenerLocked();
             }
             return enabled && registered;
@@ -177,6 +203,12 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         if (volumeGuardEnabled && !volumeGuardError.isEmpty()) {
             builder.append("\nVolume-guard error: ").append(volumeGuardError);
         }
+        if (volumeGuardEnabled && !volumeGuardWarning.isEmpty()) {
+            builder.append("\nVolume-guard note: ").append(volumeGuardWarning);
+        }
+        if (volumeGuardEnabled && !volumeGuardActive) {
+            builder.append("\nAuto-recovery: armed (event-driven with bounded retry)");
+        }
         return builder.toString();
     }
 
@@ -211,7 +243,9 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             stopVolumeGuardLocked();
             selectedVolumeDevice = requestedDevice;
             volumeGuardEnabled = requestedEnabled;
+            volumeRecoveryAttempt = 0;
             if (requestedEnabled) {
+                ensureInputObserverLocked();
                 startVolumeGuardLocked();
             }
             return volumeGuardActive;
@@ -267,6 +301,8 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             setOnMediaKeyListenerMethod = setter;
             registered = true;
             lastError = "";
+            mediaRecoveryAttempt = 0;
+            cancelMediaRecoveryLocked();
         } catch (Exception exception) {
             registered = false;
             mediaSessionManager = null;
@@ -283,6 +319,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
 
         if (context == null) {
             volumeGuardError = "Shizuku v13 Context is unavailable";
+            scheduleVolumeRecoveryLocked();
             return;
         }
 
@@ -301,24 +338,28 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             VolumeInputDeviceParser.Device resolved = resolveSelectedDevice(requested);
             if (resolved == null) {
                 volumeGuardError = "Selected headset input device is not currently connected";
+                scheduleVolumeRecoveryLocked();
                 return;
             }
 
             audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
             if (audioManager == null) {
                 volumeGuardError = "AudioManager is unavailable in the Shizuku process";
+                scheduleVolumeRecoveryLocked();
                 return;
             }
 
             stableMediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
             registerVolumeReceiverLocked();
 
-            Process process = new ProcessBuilder(GETEVENT, "-lt", resolved.path)
+            Process process = new ProcessBuilder(GETEVENT, "-q", resolved.path)
                     .redirectErrorStream(true)
                     .start();
             volumeMonitorProcess = process;
             selectedResolvedPath = resolved.path;
             volumeGuardActive = true;
+            volumeRecoveryAttempt = 0;
+            cancelVolumeRecoveryLocked();
 
             Thread readerThread = new Thread(
                     () -> readVolumeEvents(process, resolved),
@@ -329,8 +370,10 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             readerThread.start();
         } catch (Exception exception) {
             volumeGuardError = concise(exception);
-            stopVolumeGuardLocked();
-            volumeGuardEnabled = true;
+            clearVolumeMonitorLocked(null);
+            if (volumeGuardEnabled) {
+                scheduleVolumeRecoveryLocked();
+            }
         }
     }
 
@@ -357,17 +400,34 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                 .redirectErrorStream(true)
                 .start();
         StringBuilder output = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                process.getInputStream(), StandardCharsets.UTF_8
-        ))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append('\n');
+        AtomicReference<IOException> readFailure = new AtomicReference<>();
+        Thread outputReader = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                    process.getInputStream(), StandardCharsets.UTF_8
+            ))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append('\n');
+                }
+            } catch (IOException exception) {
+                readFailure.set(exception);
             }
-        }
+        }, "ButtonSilencerDeviceScan");
+        outputReader.setDaemon(true);
+        outputReader.start();
+
         if (!process.waitFor(5, TimeUnit.SECONDS)) {
             process.destroyForcibly();
+            outputReader.join(500L);
             throw new IOException("getevent device scan timed out");
+        }
+        outputReader.join(1_000L);
+        if (outputReader.isAlive()) {
+            throw new IOException("getevent device scan output did not close");
+        }
+        IOException readerException = readFailure.get();
+        if (readerException != null) {
+            throw readerException;
         }
         if (process.exitValue() != 0) {
             throw new IOException("getevent device scan failed with exit " + process.exitValue());
@@ -379,91 +439,111 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             Process process,
             VolumeInputDeviceParser.Device selectedDevice
     ) {
+        String failure = "Input monitor stopped; waiting for the headset input node";
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 process.getInputStream(), StandardCharsets.UTF_8
         ))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (!volumeGuardEnabled || process != volumeMonitorProcess) {
-                    break;
+                    return;
                 }
-                String upper = line.toUpperCase(Locale.ROOT);
-                boolean volumeKey = upper.contains("KEY_VOLUMEUP")
-                        || upper.contains("KEY_VOLUMEDOWN");
-                boolean keyDown = upper.contains(" DOWN") || upper.endsWith(" 00000001");
-                if (volumeKey && keyDown) {
-                    handleSelectedHeadsetVolumePress(selectedDevice, upper);
-                }
-            }
-
-            synchronized (lock) {
-                if (process == volumeMonitorProcess && volumeGuardEnabled) {
-                    volumeGuardActive = false;
-                    volumeGuardError = "Input monitor stopped; reconnect or rescan the headset";
+                String event = line.trim();
+                if (RAW_VOLUME_UP_PRESS.equals(event)) {
+                    handleSelectedHeadsetVolumePress(selectedDevice, true);
+                } else if (RAW_VOLUME_DOWN_PRESS.equals(event)) {
+                    handleSelectedHeadsetVolumePress(selectedDevice, false);
                 }
             }
         } catch (IOException exception) {
-            synchronized (lock) {
-                if (process == volumeMonitorProcess && volumeGuardEnabled) {
-                    volumeGuardActive = false;
-                    volumeGuardError = concise(exception);
-                }
+            failure = concise(exception);
+        }
+
+        synchronized (lock) {
+            if (process == volumeMonitorProcess && volumeGuardEnabled) {
+                volumeGuardActive = false;
+                selectedResolvedPath = "";
+                volumeGuardError = failure;
+                clearVolumeMonitorLocked(process);
+                volumeRecoveryAttempt = 0;
+                scheduleVolumeRecoveryLocked();
             }
         }
     }
 
     private void handleSelectedHeadsetVolumePress(
             VolumeInputDeviceParser.Device device,
-            String eventLine
+            boolean volumeUp
     ) {
-        final AudioManager manager;
         final int targetVolume;
         synchronized (lock) {
             if (!volumeGuardEnabled || !volumeGuardActive || audioManager == null) {
                 return;
             }
-            manager = audioManager;
-            int observed = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            int observed = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
             long now = SystemClock.uptimeMillis();
             if (now >= suppressVolumeUpdatesUntil && observed != stableMediaVolume) {
                 stableMediaVolume = observed;
             }
             targetVolume = stableMediaVolume >= 0 ? stableMediaVolume : observed;
+            pendingRestoreVolume = targetVolume;
             suppressVolumeUpdatesUntil = now + 700L;
+
+            // A faulty inline remote can emit a burst of repeated key-down events. Keep at most one
+            // small restore cycle in the Handler queue; subsequent events only refresh the target.
+            if (!volumeRestoreCycleScheduled) {
+                volumeRestoreCycleScheduled = true;
+                callbackHandler.postDelayed(volumeRestoreRunnable, 25L);
+                callbackHandler.postDelayed(volumeRestoreRunnable, 90L);
+                callbackHandler.postDelayed(volumeRestoreFinishRunnable, 220L);
+            }
         }
 
         int count = neutralizedVolumeCount.incrementAndGet();
         if (diagnosticLoggingEnabled) {
-            String direction = eventLine.contains("KEY_VOLUMEUP")
-                    ? "VOLUME_UP"
-                    : "VOLUME_DOWN";
-            lastVolumeEvent = "NEUTRALIZING " + direction
+            lastVolumeEvent = "NEUTRALIZING " + (volumeUp ? "VOLUME_UP" : "VOLUME_DOWN")
                     + "\n" + device.name + "  count=" + count;
         }
-
-        restoreVolumeLater(manager, targetVolume, 25L);
-        restoreVolumeLater(manager, targetVolume, 90L);
-        restoreVolumeLater(manager, targetVolume, 220L);
     }
 
-    private void restoreVolumeLater(AudioManager manager, int targetVolume, long delayMillis) {
-        callbackHandler.postDelayed(() -> {
-            try {
-                int current = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                if (current != targetVolume) {
-                    manager.setStreamVolume(
-                            AudioManager.STREAM_MUSIC,
-                            targetVolume,
-                            AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE
-                    );
+    private void restorePendingVolume(boolean finishCycle) {
+        final AudioManager manager;
+        final int targetVolume;
+        synchronized (lock) {
+            if (!volumeGuardEnabled || !volumeGuardActive
+                    || audioManager == null || pendingRestoreVolume < 0) {
+                if (finishCycle) {
+                    volumeRestoreCycleScheduled = false;
                 }
-                synchronized (lock) {
+                return;
+            }
+            manager = audioManager;
+            targetVolume = pendingRestoreVolume;
+        }
+
+        try {
+            int current = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            if (current != targetVolume) {
+                manager.setStreamVolume(
+                        AudioManager.STREAM_MUSIC,
+                        targetVolume,
+                        AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE
+                );
+            }
+            synchronized (lock) {
+                if (manager == audioManager) {
                     stableMediaVolume = targetVolume;
                 }
-            } catch (RuntimeException exception) {
-                volumeGuardError = concise(exception);
             }
-        }, delayMillis);
+        } catch (RuntimeException exception) {
+            volumeGuardError = concise(exception);
+        } finally {
+            if (finishCycle) {
+                synchronized (lock) {
+                    volumeRestoreCycleScheduled = false;
+                }
+            }
+        }
     }
 
     private void registerVolumeReceiverLocked() {
@@ -471,7 +551,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             return;
         }
 
-        volumeReceiver = new BroadcastReceiver() {
+        BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context receiverContext, Intent intent) {
                 if (!VOLUME_CHANGED_ACTION.equals(intent.getAction())) {
@@ -497,41 +577,170 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         };
 
         IntentFilter filter = new IntentFilter(VOLUME_CHANGED_ACTION);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(volumeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            context.registerReceiver(volumeReceiver, filter);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                context.registerReceiver(receiver, filter);
+            }
+            volumeReceiver = receiver;
+            volumeGuardWarning = "";
+        } catch (RuntimeException exception) {
+            // A Shizuku UserService Context is not a normal app Context on every OEM. The guard can
+            // still work by snapshotting STREAM_MUSIC directly at the key event; this receiver only
+            // improves baseline tracking for legitimate volume changes between headset presses.
+            volumeReceiver = null;
+            volumeGuardWarning = "Volume-change callback unavailable on this Android build";
         }
     }
 
-    private void stopVolumeGuardLocked() {
-        volumeGuardActive = false;
-        selectedResolvedPath = "";
+    private void ensureInputObserverLocked() {
+        if (inputObserver != null) {
+            return;
+        }
+        try {
+            inputObserver = new FileObserver(
+                    INPUT_DIR,
+                    FileObserver.CREATE
+                            | FileObserver.DELETE
+                            | FileObserver.MOVED_FROM
+                            | FileObserver.MOVED_TO
+                            | FileObserver.DELETE_SELF
+                            | FileObserver.MOVE_SELF
+            ) {
+                @Override
+                public void onEvent(int event, String path) {
+                    callbackHandler.post(() -> {
+                        synchronized (lock) {
+                            if (!volumeGuardEnabled || volumeGuardActive) {
+                                return;
+                            }
+                            // A USB/input-node change is the strongest signal that a reconnect can
+                            // succeed. Restart the bounded backoff immediately, without polling.
+                            cancelVolumeRecoveryLocked();
+                            volumeRecoveryAttempt = 0;
+                            scheduleVolumeRecoveryLocked();
+                        }
+                    });
+                }
+            };
+            inputObserver.startWatching();
+        } catch (RuntimeException exception) {
+            inputObserver = null;
+            volumeGuardWarning = "Input-node observer unavailable: " + concise(exception);
+        }
+    }
 
+    private void stopInputObserverLocked() {
+        FileObserver observer = inputObserver;
+        inputObserver = null;
+        if (observer != null) {
+            observer.stopWatching();
+        }
+    }
+
+    private void recoverVolumeGuard() {
+        synchronized (lock) {
+            volumeRecoveryScheduled = false;
+            if (!volumeGuardEnabled || volumeGuardActive) {
+                return;
+            }
+            clearVolumeMonitorLocked(null);
+            startVolumeGuardLocked();
+        }
+    }
+
+    private void scheduleVolumeRecoveryLocked() {
+        if (!volumeGuardEnabled || volumeGuardActive || volumeRecoveryScheduled) {
+            return;
+        }
+        if (volumeRecoveryAttempt >= VOLUME_RECOVERY_DELAYS_MS.length) {
+            // Stay fully idle until /dev/input changes. No permanent timer or wake-up loop.
+            return;
+        }
+        long delay = VOLUME_RECOVERY_DELAYS_MS[volumeRecoveryAttempt++];
+        volumeRecoveryScheduled = true;
+        callbackHandler.postDelayed(volumeRecoveryRunnable, delay);
+    }
+
+    private void cancelVolumeRecoveryLocked() {
+        volumeRecoveryScheduled = false;
+        callbackHandler.removeCallbacks(volumeRecoveryRunnable);
+    }
+
+    private void recoverMediaListener() {
+        synchronized (lock) {
+            mediaRecoveryScheduled = false;
+            if (!enabled || registered) {
+                return;
+            }
+            registerListenerLocked();
+            if (!registered) {
+                scheduleMediaRecoveryLocked();
+            }
+        }
+    }
+
+    private void scheduleMediaRecoveryLocked() {
+        if (!enabled || registered || mediaRecoveryScheduled) {
+            return;
+        }
+        if (mediaRecoveryAttempt >= MEDIA_RECOVERY_DELAYS_MS.length) {
+            return;
+        }
+        long delay = MEDIA_RECOVERY_DELAYS_MS[mediaRecoveryAttempt++];
+        mediaRecoveryScheduled = true;
+        callbackHandler.postDelayed(mediaRecoveryRunnable, delay);
+    }
+
+    private void cancelMediaRecoveryLocked() {
+        mediaRecoveryScheduled = false;
+        callbackHandler.removeCallbacks(mediaRecoveryRunnable);
+    }
+
+    private void clearVolumeMonitorLocked(Process expectedProcess) {
         Process process = volumeMonitorProcess;
+        if (expectedProcess != null && process != expectedProcess) {
+            return;
+        }
+
         volumeMonitorProcess = null;
-        if (process != null) {
+        if (process != null && process.isAlive()) {
             process.destroy();
         }
 
         Thread thread = volumeMonitorThread;
         volumeMonitorThread = null;
-        if (thread != null) {
+        if (thread != null && thread != Thread.currentThread()) {
             thread.interrupt();
         }
 
-        if (volumeReceiver != null && context != null) {
+        BroadcastReceiver receiver = volumeReceiver;
+        volumeReceiver = null;
+        if (receiver != null && context != null) {
             try {
-                context.unregisterReceiver(volumeReceiver);
-            } catch (IllegalArgumentException ignored) {
-                // Already unregistered by the framework.
+                context.unregisterReceiver(receiver);
+            } catch (RuntimeException ignored) {
+                // Already gone, or this OEM's UserService Context does not support unregistering.
             }
-            volumeReceiver = null;
         }
 
+        callbackHandler.removeCallbacks(volumeRestoreRunnable);
+        callbackHandler.removeCallbacks(volumeRestoreFinishRunnable);
+        volumeRestoreCycleScheduled = false;
+        pendingRestoreVolume = -1;
         audioManager = null;
         stableMediaVolume = -1;
         suppressVolumeUpdatesUntil = 0L;
+    }
+
+    private void stopVolumeGuardLocked() {
+        volumeGuardActive = false;
+        selectedResolvedPath = "";
+        cancelVolumeRecoveryLocked();
+        volumeRecoveryAttempt = 0;
+        clearVolumeMonitorLocked(null);
+        stopInputObserverLocked();
     }
 
     @SuppressLint({"PrivateApi", "DiscouragedPrivateApi"})

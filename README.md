@@ -1,6 +1,6 @@
-# Button Silencer 3.0
+# Button Silencer 3.1
 
-A compact Android utility that blocks unwanted headset controls without claiming the USB audio interface.
+A compact Android utility that blocks unwanted headset controls without claiming the USB audio interface or disabling the phone's own buttons.
 
 **Developer:** [EithonX](https://github.com/EithonX/)
 
@@ -9,17 +9,27 @@ A compact Android utility that blocks unwanted headset controls without claiming
 - Blocks `HEADSETHOOK` and Android media keys through a privileged Shizuku media-key listener.
 - Neutralizes volume-up and volume-down only from the explicitly selected headset/IEM input device.
 - Leaves the phone's own physical volume buttons working.
-- Works with the display on or off on the tested device path.
+- Keeps privileged protection active with the display on or off while Shizuku is running.
 - Keeps the previous Accessibility key filter as an optional advanced fallback.
 - Uses no network permission, analytics, ads, account, foreground notification, wake lock, USB-interface claim, or persistent event log.
 
+## 3.1 reliability changes
+
+The Shizuku lifecycle is now self-healing instead of relying on the activity being reopened:
+
+- The app uses Shizuku's sticky binder listener and rebinds the daemon UserService when the Shizuku binder returns.
+- The app also links directly to the privileged UserService binder so a dead/restarted privileged process is detected even when Shizuku itself is still alive.
+- Rebind attempts use a capped backoff and only start after a real disconnect. There is no permanent keep-alive loop.
+- If the selected `/dev/input/event*` monitor disappears, the privileged service watches `/dev/input` for node changes and re-resolves the selected device by name. This handles USB reconnects and event-number churn without continuously rescanning.
+- A few short fallback retries cover transient races around detach/reattach; after those, the service goes fully idle until `/dev/input` changes.
+
+Shizuku daemon UserServices are killed when the Shizuku service itself stops or restarts. Button Silencer therefore cannot protect headset buttons while Shizuku is actually offline, but it will reattach after Shizuku returns and permission is still granted.
+
 ## Efficiency design
 
-The privileged input monitor uses Android's blocking `getevent` reader on one selected input node. While no button is pressed, the reader sleeps inside the kernel instead of polling. The media listener and volume-change receiver are callback-driven. The app activity has no periodic refresh loop.
+The privileged input monitor runs raw `getevent -q` on one selected input node, avoiding label/timestamp formatting work. While no button is pressed, the process is blocked in the kernel rather than polling. The media-key listener, `/dev/input` observer, and volume callbacks are event-driven. There is no wake lock and the activity has no periodic refresh loop.
 
-The v3 migration pauses the Accessibility fallback by default because the privileged routes now handle the tested screen-on and screen-off cases. It remains available under Advanced settings.
-
-Detailed event logging is disabled by default. When enabled from Advanced settings, Accessibility events are kept only in an in-memory ring buffer for the current process session. The privileged service avoids timestamp/string work while diagnostics are off.
+Repeated faulty headset-volume events are coalesced into one bounded three-step restore cycle, so a noisy inline remote cannot grow an unbounded Handler queue. Detailed event logging is disabled by default. When enabled from Advanced settings, Accessibility events are kept only in an in-memory ring buffer for the current process session.
 
 ## Build with GitHub Actions
 
@@ -33,7 +43,7 @@ The artifact contains:
 - `ButtonSilencer-debug.apk` — diagnostic build with a separate `.debug` application ID.
 - `SHA256SUMS.txt`.
 
-Both APKs are signed with the included deterministic **test key** so later workflow builds can install over earlier builds without uninstalling. This is convenient for private testing; replace the signing configuration before public distribution.
+Both APKs are signed with the included deterministic **test key** so later workflow builds can install over earlier builds without uninstalling. Replace the signing configuration before public distribution.
 
 ## First setup
 
@@ -42,11 +52,11 @@ Both APKs are signed with the included deterministic **test key** so later workf
 3. Open Button Silencer and enable **Headset button protection**.
 4. Grant the Shizuku permission.
 5. Connect the USB DAC/IEM/headset.
-6. Tap **Scan devices** and choose the external headset entry.
+6. Tap **Scan headset** and choose the external headset entry.
 7. Lock the screen and test play/pause plus headset volume controls.
 8. Confirm the phone's own side-volume buttons still work.
 
-After a phone or Shizuku restart, reopen Button Silencer once so the daemon UserService can reconnect.
+After a phone reboot, start Shizuku again. Button Silencer will reconnect when Shizuku delivers its binder.
 
 ## Advanced settings
 

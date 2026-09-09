@@ -85,11 +85,17 @@ final class VolumeInputDeviceParser {
         return normalized.contains("gpio")
                 || normalized.contains("qpnp")
                 || normalized.contains("pmic")
+                || normalized.contains("spmi")
                 || normalized.contains("keypad")
                 || normalized.contains("mtk-kpd")
+                || normalized.contains("s2mp")
+                || normalized.contains("sec_key")
+                || normalized.contains("sec-key")
                 || normalized.contains("volume_keys")
+                || normalized.contains("volume-keys")
                 || normalized.contains("sidekey")
                 || normalized.contains("side key")
+                || normalized.contains("pwrkey")
                 || normalized.contains("powerkey")
                 || normalized.contains("power key");
     }

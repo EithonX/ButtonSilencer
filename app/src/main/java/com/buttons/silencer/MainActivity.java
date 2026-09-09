@@ -32,6 +32,7 @@ public final class MainActivity extends Activity {
     private TextView protectionStatusTitle;
     private TextView protectionStatusDetail;
     private TextView statusDot;
+    private TextView runtimeStatusText;
     private TextView selectedDeviceName;
     private TextView selectedDevicePath;
     private TextView accessibilityStatus;
@@ -101,6 +102,7 @@ public final class MainActivity extends Activity {
         protectionStatusTitle = findViewById(R.id.protectionStatusTitle);
         protectionStatusDetail = findViewById(R.id.protectionStatusDetail);
         statusDot = findViewById(R.id.statusDot);
+        runtimeStatusText = findViewById(R.id.runtimeStatusText);
         selectedDeviceName = findViewById(R.id.selectedDeviceName);
         selectedDevicePath = findViewById(R.id.selectedDevicePath);
         accessibilityStatus = findViewById(R.id.accessibilityStatus);
@@ -290,6 +292,10 @@ public final class MainActivity extends Activity {
                 volumeDesired,
                 stateFlags
         );
+        runtimeStatusText.setText(getString(
+                R.string.runtime_status_format,
+                shizukuController.getLocalStatus()
+        ));
 
         boolean accessibilityEnabled = isAccessibilityServiceEnabled();
         accessibilityStatus.setText(getString(

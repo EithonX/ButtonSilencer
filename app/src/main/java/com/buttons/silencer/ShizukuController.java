@@ -14,6 +14,13 @@ import java.util.concurrent.CopyOnWriteArraySet;
 
 import rikka.shizuku.Shizuku;
 
+/**
+ * Owns the app-side Shizuku lifecycle.
+ *
+ * <p>The privileged UserService itself is a daemon, so it can keep blocking while this normal app
+ * process is gone. This controller therefore does not poll. It reacts to Shizuku binder events and
+ * to the UserService binder dying, with a small capped rebind backoff only after a real failure.</p>
+ */
 final class ShizukuController {
     interface Observer {
         void onControllerStateChanged();
@@ -21,6 +28,8 @@ final class ShizukuController {
 
     private static final int REQUEST_CODE = 49021;
     private static final int MIN_PRIVILEGED_API = Build.VERSION_CODES.O;
+    private static final long[] REBIND_DELAYS_MS = {750L, 2_000L, 5_000L, 15_000L, 30_000L};
+    private static final long BIND_TIMEOUT_MS = 8_000L;
 
     private final Context context;
     private final Shizuku.UserServiceArgs userServiceArgs;
@@ -28,18 +37,67 @@ final class ShizukuController {
     private final CopyOnWriteArraySet<Observer> observers = new CopyOnWriteArraySet<>();
 
     private volatile IPrivilegedBlocker remote;
+    private volatile IBinder remoteBinder;
     private volatile boolean binding;
+    private volatile boolean reconnectScheduled;
+    private volatile int reconnectAttempt;
     private volatile String localStatus = "Shizuku binder not connected";
 
+    private final IBinder.DeathRecipient remoteDeathRecipient = this::onRemoteBinderDied;
     private final Shizuku.OnBinderReceivedListener binderReceivedListener = this::onBinderReceived;
     private final Shizuku.OnBinderDeadListener binderDeadListener = this::onBinderDead;
     private final Shizuku.OnRequestPermissionResultListener permissionResultListener =
             this::onPermissionResult;
 
+    private final Runnable bindTimeoutRunnable = () -> {
+        synchronized (ShizukuController.this) {
+            if (!binding || remote != null) {
+                return;
+            }
+            binding = false;
+            setLocalStatus("Privileged service connection timed out; retrying");
+            scheduleReconnect();
+        }
+    };
+
+    private final Runnable reconnectRunnable = () -> {
+        reconnectScheduled = false;
+        if (!Preferences.privilegedProtectionRequested(context) || remote != null || binding) {
+            return;
+        }
+        if (!isBinderAlive()) {
+            // Binder-received is the wake-up signal. Do not poll a dead Shizuku service.
+            return;
+        }
+        try {
+            if (!Shizuku.isPreV11()
+                    && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                bindPrivilegedService();
+            }
+        } catch (RuntimeException exception) {
+            setLocalStatus("Shizuku reconnect failed: " + concise(exception));
+            scheduleReconnect();
+        }
+    };
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             binding = false;
+            cancelBindTimeout();
+            cancelReconnect();
+            reconnectAttempt = 0;
+            clearRemoteBinder();
+
+            try {
+                service.linkToDeath(remoteDeathRecipient, 0);
+            } catch (RemoteException exception) {
+                setLocalStatus("Privileged service died while connecting");
+                scheduleReconnect();
+                return;
+            }
+
+            remoteBinder = service;
             remote = IPrivilegedBlocker.Stub.asInterface(service);
             setLocalStatus("Privileged service connected");
             applyDesiredState();
@@ -48,8 +106,19 @@ final class ShizukuController {
         @Override
         public void onServiceDisconnected(ComponentName name) {
             binding = false;
-            remote = null;
-            setLocalStatus("Privileged service disconnected");
+            cancelBindTimeout();
+            clearRemoteBinder();
+            setLocalStatus("Privileged service disconnected; reconnecting");
+            scheduleReconnect();
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            binding = false;
+            cancelBindTimeout();
+            clearRemoteBinder();
+            setLocalStatus("Privileged binding died; reconnecting");
+            scheduleReconnect();
         }
     };
 
@@ -59,22 +128,16 @@ final class ShizukuController {
                 new ComponentName(this.context, PrivilegedMediaKeyService.class)
         )
                 .daemon(true)
+                // Keep the tag stable across releases. version() is what tells Shizuku to
+                // replace an older daemon with the newly installed service code.
                 .tag("button-silencer-privileged-v4")
                 .processNameSuffix("headset_guard")
                 .debuggable(BuildConfig.DEBUG)
                 .version(BuildConfig.VERSION_CODE);
 
-        Shizuku.addBinderReceivedListener(binderReceivedListener);
+        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
         Shizuku.addBinderDeadListener(binderDeadListener);
         Shizuku.addRequestPermissionResultListener(permissionResultListener);
-
-        try {
-            if (Shizuku.pingBinder()) {
-                onBinderReceived();
-            }
-        } catch (RuntimeException exception) {
-            setLocalStatus("Shizuku unavailable: " + concise(exception));
-        }
     }
 
     void addObserver(Observer observer) {
@@ -90,6 +153,10 @@ final class ShizukuController {
     }
 
     void requestPermissionOrConnect() {
+        if (reconnectAttempt >= REBIND_DELAYS_MS.length) {
+            cancelReconnect();
+            reconnectAttempt = 0;
+        }
         if (Build.VERSION.SDK_INT < MIN_PRIVILEGED_API) {
             setLocalStatus("Privileged mode requires Android 8.0 or newer");
             return;
@@ -128,8 +195,7 @@ final class ShizukuController {
 
         if (enabled) {
             requestPermissionOrConnect();
-            IPrivilegedBlocker current = remote;
-            if (current != null) {
+            if (remote != null) {
                 applyDesiredState();
             }
         } else {
@@ -152,8 +218,7 @@ final class ShizukuController {
                         ? "Privileged media-key listener enabled"
                         : "Privileged media-key listener disabled");
             } catch (RemoteException exception) {
-                remote = null;
-                setLocalStatus("Media listener update failed: " + concise(exception));
+                handleRemoteFailure("Media listener update failed", exception);
             }
         }
         stopServiceIfUnused();
@@ -169,8 +234,7 @@ final class ShizukuController {
         try {
             return current.listVolumeInputDevices();
         } catch (RemoteException exception) {
-            remote = null;
-            setLocalStatus("Input-device scan failed: " + concise(exception));
+            handleRemoteFailure("Input-device scan failed", exception);
             return new String[0];
         }
     }
@@ -197,11 +261,10 @@ final class ShizukuController {
                 );
                 setLocalStatus(active
                         ? "Headset volume guard active"
-                        : (enabled ? "Headset volume guard needs attention"
+                        : (enabled ? "Headset volume guard is recovering"
                                 : "Headset volume guard off"));
             } catch (RemoteException exception) {
-                remote = null;
-                setLocalStatus("Headset volume guard failed: " + concise(exception));
+                handleRemoteFailure("Headset volume guard failed", exception);
             }
         }
         stopServiceIfUnused();
@@ -222,8 +285,7 @@ final class ShizukuController {
             try {
                 current.setDiagnosticLogging(enabled);
             } catch (RemoteException exception) {
-                remote = null;
-                setLocalStatus("Diagnostics update failed: " + concise(exception));
+                handleRemoteFailure("Diagnostics update failed", exception);
             }
         }
         notifyObservers();
@@ -237,8 +299,7 @@ final class ShizukuController {
         try {
             return current.getStateFlags();
         } catch (RemoteException exception) {
-            remote = null;
-            setLocalStatus("Privileged state unavailable: " + concise(exception));
+            handleRemoteFailure("Privileged state unavailable", exception);
             return 0;
         }
     }
@@ -252,8 +313,7 @@ final class ShizukuController {
             try {
                 return current.getStatus();
             } catch (RemoteException exception) {
-                remote = null;
-                setLocalStatus("Privileged service connection lost: " + concise(exception));
+                handleRemoteFailure("Privileged service connection lost", exception);
             }
         }
         return localStatus;
@@ -264,7 +324,7 @@ final class ShizukuController {
     }
 
     boolean isRemoteConnected() {
-        return remote != null;
+        return remote != null && remoteBinder != null && remoteBinder.isBinderAlive();
     }
 
     boolean isBinderAlive() {
@@ -288,6 +348,8 @@ final class ShizukuController {
     }
 
     private void onBinderReceived() {
+        cancelReconnect();
+        reconnectAttempt = 0;
         setLocalStatus("Shizuku connected");
         if (Preferences.privilegedProtectionRequested(context)) {
             requestPermissionOrConnect();
@@ -296,8 +358,29 @@ final class ShizukuController {
 
     private void onBinderDead() {
         binding = false;
-        remote = null;
-        setLocalStatus("Shizuku stopped; restart it and reconnect");
+        cancelBindTimeout();
+        cancelReconnect();
+        reconnectAttempt = 0;
+        clearRemoteBinder();
+        setLocalStatus("Shizuku stopped; protection will reconnect when Shizuku returns");
+    }
+
+    private void onRemoteBinderDied() {
+        mainHandler.post(() -> {
+            binding = false;
+            cancelBindTimeout();
+            clearRemoteBinder();
+            if (!isBinderAlive()) {
+                cancelReconnect();
+                reconnectAttempt = 0;
+                setLocalStatus(
+                        "Shizuku stopped; protection will reconnect when Shizuku returns"
+                );
+                return;
+            }
+            setLocalStatus("Privileged guard restarted; reconnecting");
+            scheduleReconnect();
+        });
     }
 
     private void onPermissionResult(int requestCode, int grantResult) {
@@ -313,6 +396,9 @@ final class ShizukuController {
     }
 
     private synchronized void bindPrivilegedService() {
+        if (!Preferences.privilegedProtectionRequested(context)) {
+            return;
+        }
         if (remote != null) {
             applyDesiredState();
             return;
@@ -322,11 +408,18 @@ final class ShizukuController {
         }
         try {
             binding = true;
-            setLocalStatus("Starting privileged headset guard");
+            cancelReconnect();
+            setLocalStatus(reconnectAttempt == 0
+                    ? "Starting privileged headset guard"
+                    : "Reconnecting privileged headset guard");
             Shizuku.bindUserService(userServiceArgs, serviceConnection);
+            mainHandler.removeCallbacks(bindTimeoutRunnable);
+            mainHandler.postDelayed(bindTimeoutRunnable, BIND_TIMEOUT_MS);
         } catch (RuntimeException exception) {
             binding = false;
+            cancelBindTimeout();
             setLocalStatus("Could not start privileged service: " + concise(exception));
+            scheduleReconnect();
         }
     }
 
@@ -344,15 +437,15 @@ final class ShizukuController {
                     Preferences.headsetVolumeDevice(context),
                     Preferences.headsetVolumeGuardEnabled(context)
             );
-            if (mediaActive && (volumeActive
-                    || !Preferences.headsetVolumeGuardEnabled(context))) {
+            if ((mediaActive || !Preferences.privilegedMediaEnabled(context))
+                    && (volumeActive || !Preferences.headsetVolumeGuardEnabled(context))) {
+                reconnectAttempt = 0;
                 setLocalStatus("Headset protection active");
             } else {
-                setLocalStatus("Privileged service connected; check configuration");
+                setLocalStatus("Privileged service connected; recovery is armed");
             }
         } catch (RemoteException exception) {
-            remote = null;
-            setLocalStatus("Privileged service failed: " + concise(exception));
+            handleRemoteFailure("Privileged service failed", exception);
         }
     }
 
@@ -363,6 +456,9 @@ final class ShizukuController {
     }
 
     private void stopPrivilegedService() {
+        cancelBindTimeout();
+        cancelReconnect();
+        reconnectAttempt = 0;
         IPrivilegedBlocker current = remote;
         if (current != null) {
             try {
@@ -373,7 +469,7 @@ final class ShizukuController {
             }
         }
 
-        remote = null;
+        clearRemoteBinder();
         binding = false;
         try {
             if (isBinderAlive() && !Shizuku.isPreV11()
@@ -383,6 +479,53 @@ final class ShizukuController {
             setLocalStatus("Privileged headset protection is off");
         } catch (RuntimeException exception) {
             setLocalStatus("Protection is off; cleanup failed: " + concise(exception));
+        }
+    }
+
+    private void handleRemoteFailure(String prefix, RemoteException exception) {
+        binding = false;
+        cancelBindTimeout();
+        clearRemoteBinder();
+        setLocalStatus(prefix + ": " + concise(exception));
+        scheduleReconnect();
+    }
+
+    private synchronized void scheduleReconnect() {
+        if (reconnectScheduled || binding || remote != null
+                || !Preferences.privilegedProtectionRequested(context)) {
+            return;
+        }
+        if (!isBinderAlive() || !hasPermission()) {
+            return;
+        }
+        if (reconnectAttempt >= REBIND_DELAYS_MS.length) {
+            setLocalStatus("Automatic reconnect paused; tap Reconnect Shizuku");
+            return;
+        }
+        long delay = REBIND_DELAYS_MS[reconnectAttempt++];
+        reconnectScheduled = true;
+        mainHandler.postDelayed(reconnectRunnable, delay);
+    }
+
+    private synchronized void cancelBindTimeout() {
+        mainHandler.removeCallbacks(bindTimeoutRunnable);
+    }
+
+    private synchronized void cancelReconnect() {
+        reconnectScheduled = false;
+        mainHandler.removeCallbacks(reconnectRunnable);
+    }
+
+    private synchronized void clearRemoteBinder() {
+        IBinder binder = remoteBinder;
+        remoteBinder = null;
+        remote = null;
+        if (binder != null) {
+            try {
+                binder.unlinkToDeath(remoteDeathRecipient, 0);
+            } catch (RuntimeException ignored) {
+                // Binder was already dead or unlinked.
+            }
         }
     }
 

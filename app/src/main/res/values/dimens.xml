@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="screen_gutter">18dp</dimen>
+    <dimen name="screen_top">20dp</dimen>
+    <dimen name="card_padding">18dp</dimen>
+    <dimen name="section_gap">14dp</dimen>
+</resources>

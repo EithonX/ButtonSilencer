@@ -4,17 +4,19 @@
     android:layout_height="match_parent"
     android:background="@color/background"
     android:clipToPadding="false"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:overScrollMode="ifContentScrolls">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="20dp"
-        android:paddingTop="24dp"
-        android:paddingEnd="20dp"
-        android:paddingBottom="36dp">
+        android:paddingStart="@dimen/screen_gutter"
+        android:paddingTop="@dimen/screen_top"
+        android:paddingEnd="@dimen/screen_gutter"
+        android:paddingBottom="40dp">
 
+        <!-- Product identity stays compact. The operational state is the real hero. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -22,33 +24,33 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="64dp"
-                android:layout_height="64dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:contentDescription="@string/app_icon_description"
                 android:src="@mipmap/ic_launcher" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="14dp"
+                android:layout_marginStart="12dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
                     android:text="@string/app_name"
                     android:textColor="@color/text_primary"
-                    android:textSize="26sp"
-                    android:textStyle="bold" />
+                    android:textSize="24sp" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:text="@string/tagline"
                     android:textColor="@color/text_secondary"
-                    android:textSize="14sp" />
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <TextView
@@ -56,33 +58,35 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@drawable/bg_version_chip"
-                android:paddingStart="10dp"
+                android:paddingStart="9dp"
                 android:paddingTop="5dp"
-                android:paddingEnd="10dp"
+                android:paddingEnd="9dp"
                 android:paddingBottom="5dp"
                 android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/protectionStatusCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="20dp"
             android:background="@drawable/bg_status_inactive"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:padding="@dimen/card_padding">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="top"
                 android:orientation="horizontal">
 
                 <TextView
                     android:id="@+id/statusDot"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_status_orb"
+                    android:gravity="center"
                     android:text="@string/status_dot"
                     android:textColor="@color/status_inactive"
                     android:textSize="22sp" />
@@ -90,36 +94,55 @@
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
                         android:id="@+id/protectionStatusTitle"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
                         android:textColor="@color/text_primary"
-                        android:textSize="19sp"
-                        android:textStyle="bold" />
+                        android:textSize="20sp" />
 
                     <TextView
                         android:id="@+id/protectionStatusDetail"
                         style="@style/TextBody"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp" />
+                        android:layout_marginTop="4dp" />
                 </LinearLayout>
             </LinearLayout>
 
-            <Switch
-                android:id="@+id/protectionSwitch"
+            <TextView
+                android:id="@+id/runtimeStatusText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
-                android:minHeight="48dp"
-                android:text="@string/protection_switch"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp" />
+                android:background="@drawable/bg_runtime_chip"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="8dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="14dp"
+                android:background="@color/status_divider" />
+
+            <Switch
+                android:id="@+id/protectionSwitch"
+                style="@style/WidgetSwitchPrimary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/protection_switch" />
 
             <Button
                 android:id="@+id/reconnectShizukuButton"
@@ -134,34 +157,36 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="@dimen/section_gap"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:padding="@dimen/card_padding">
 
             <TextView
-                style="@style/TextSectionTitle"
+                style="@style/TextEyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/headset_device_title" />
+                android:text="@string/headset_device_eyebrow" />
 
             <TextView
                 android:id="@+id/selectedDeviceName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="6dp"
+                android:fontFamily="sans-serif-medium"
                 android:textColor="@color/text_primary"
-                android:textSize="17sp"
-                android:textStyle="bold" />
+                android:textSize="18sp" />
 
             <TextView
                 android:id="@+id/selectedDevicePath"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
+                android:ellipsize="middle"
                 android:fontFamily="monospace"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
+                android:maxLines="1"
+                android:textColor="@color/text_tertiary"
+                android:textSize="11sp" />
 
             <TextView
                 style="@style/TextBody"
@@ -173,7 +198,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="14dp"
                 android:orientation="horizontal">
 
                 <Button
@@ -197,118 +222,126 @@
 
         <TextView
             android:id="@+id/advancedHeader"
+            style="@style/WidgetDisclosure"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_card"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center_vertical"
-            android:minHeight="56dp"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="@dimen/section_gap" />
 
         <LinearLayout
             android:id="@+id/advancedContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="18dp"
+            android:padding="@dimen/card_padding"
             android:visibility="gone">
+
+            <TextView
+                style="@style/TextEyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/privileged_routes_eyebrow" />
 
             <TextView
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:text="@string/privileged_routes_title" />
 
             <Switch
                 android:id="@+id/mediaListenerSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:minHeight="48dp"
                 android:text="@string/media_listener_switch" />
 
             <Switch
                 android:id="@+id/headsetVolumeGuardSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="48dp"
                 android:text="@string/volume_guard_switch" />
 
             <TextView
                 style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/privileged_routes_help" />
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="18dp"
-                android:layout_marginBottom="18dp"
-                android:background="@color/divider" />
+            <View style="@style/SectionDivider" />
+
+            <TextView
+                style="@style/TextEyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_eyebrow" />
 
             <TextView
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:text="@string/accessibility_fallback_title" />
 
             <TextView
                 android:id="@+id/accessibilityStatus"
-                style="@style/TextBody"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
-
-            <Switch
-                android:id="@+id/accessibilityMasterSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:minHeight="48dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
+
+            <Switch
+                android:id="@+id/accessibilityMasterSwitch"
+                style="@style/WidgetSwitchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
                 android:text="@string/accessibility_master" />
 
             <Switch
                 android:id="@+id/accessibilityMediaSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="44dp"
                 android:text="@string/accessibility_media" />
 
             <Switch
                 android:id="@+id/accessibilityExternalVolumeSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="44dp"
                 android:text="@string/accessibility_external_volume" />
 
             <Switch
                 android:id="@+id/accessibilityAssistCallSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="44dp"
                 android:text="@string/accessibility_assist_call" />
 
             <Switch
                 android:id="@+id/accessibilityAllVolumeSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="44dp"
                 android:text="@string/accessibility_all_volume" />
+
+            <TextView
+                style="@style/TextWarning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/block_all_volume_warning" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="10dp"
                 android:orientation="horizontal">
 
                 <Button
@@ -329,25 +362,27 @@
                     android:text="@string/open_app_info" />
             </LinearLayout>
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="18dp"
-                android:layout_marginBottom="18dp"
-                android:background="@color/divider" />
+            <View style="@style/SectionDivider" />
+
+            <TextView
+                style="@style/TextEyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/diagnostics_eyebrow" />
 
             <TextView
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:text="@string/diagnostics_title" />
 
             <Switch
                 android:id="@+id/diagnosticLoggingSwitch"
+                style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:minHeight="48dp"
+                android:layout_marginTop="8dp"
                 android:text="@string/diagnostic_logging" />
 
             <TextView
@@ -359,7 +394,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="10dp"
                 android:orientation="horizontal">
 
                 <Button
@@ -385,40 +420,29 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:background="@color/surface_variant"
+                android:background="@drawable/bg_code_panel"
                 android:fontFamily="monospace"
-                android:lineSpacingExtra="2dp"
                 android:padding="12dp"
-                android:text="@string/loading_diagnostics"
                 android:textColor="@color/text_secondary"
                 android:textIsSelectable="true"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/aboutHeader"
+            style="@style/WidgetDisclosure"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/bg_card"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center_vertical"
-            android:minHeight="56dp"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="10dp" />
 
         <LinearLayout
             android:id="@+id/aboutContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:background="@drawable/bg_card"
             android:orientation="vertical"
-            android:padding="18dp"
+            android:padding="@dimen/card_padding"
             android:visibility="gone">
 
             <TextView
@@ -435,45 +459,51 @@
                 android:text="@string/about_description" />
 
             <TextView
+                style="@style/TextEyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/developer_label"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+                android:text="@string/developer_label" />
 
             <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/developer_name"
-                android:textColor="@color/text_primary"
-                android:textSize="17sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/githubButton"
-                style="@style/WidgetPrimaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/open_developer_github" />
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/developer_name"
+                android:textColor="@color/text_primary"
+                android:textSize="17sp" />
 
             <TextView
                 style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/privacy_note" />
-        </LinearLayout>
+                android:layout_marginTop="2dp"
+                android:text="@string/developer_url" />
 
-        <TextView
-            style="@style/TextBody"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:gravity="center"
-            android:text="@string/footer_note"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/githubButton"
+                style="@style/WidgetSecondaryButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/open_developer_github" />
+
+            <View style="@style/SectionDivider" />
+
+            <TextView
+                style="@style/TextBody"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/privacy_note" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/footer_note"
+                android:textColor="@color/text_tertiary"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

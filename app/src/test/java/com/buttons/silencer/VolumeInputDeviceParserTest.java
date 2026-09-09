@@ -47,4 +47,14 @@ public final class VolumeInputDeviceParserTest {
         assertEquals(original.name, decoded.name);
         assertFalse(decoded.likelyInternal);
     }
+
+    @Test
+    public void recognizesMoreCommonPhoneKeyDeviceNames() {
+        assertTrue(VolumeInputDeviceParser.isLikelyInternal("s2mpu16-keys"));
+        assertTrue(VolumeInputDeviceParser.isLikelyInternal("qpnp_pon"));
+        assertTrue(VolumeInputDeviceParser.isLikelyInternal("sec_key"));
+        assertTrue(VolumeInputDeviceParser.isLikelyInternal("spmi_pmic_arb"));
+        assertFalse(VolumeInputDeviceParser.isLikelyInternal("USB Audio Headset"));
+    }
+
 }

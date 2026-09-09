@@ -11,3 +11,8 @@
 
 # The hidden OnMediaKeyListener is reached reflectively in the Shizuku UserService.
 -keepattributes InnerClasses,EnclosingMethod
+
+# JNI uses the class/method name in the exported native symbol. Do not let R8 rename it.
+-keep class com.buttons.silencer.EvdevExclusiveGuard {
+    private static native int nativeSetGrab(int, boolean);
+}

@@ -4,9 +4,11 @@ import android.view.KeyEvent;
 
 final class ButtonPolicy {
     enum Category {
+        /** Call-capable controls are always consumed while protection is enabled. */
+        CALL_SAFETY,
         MEDIA,
         VOLUME,
-        ASSIST_CALL,
+        ASSIST,
         OTHER
     }
 
@@ -37,8 +39,14 @@ final class ButtonPolicy {
 
     static Category categoryFor(int keyCode) {
         switch (keyCode) {
+            // These keys are commonly interpreted as answer/hang-up or play/pause by dialers and
+            // VoIP apps. They are safety-critical and must not depend on an optional filter toggle.
             case KeyEvent.KEYCODE_HEADSETHOOK:
             case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_CALL:
+            case KeyEvent.KEYCODE_ENDCALL:
+                return Category.CALL_SAFETY;
+
             case KeyEvent.KEYCODE_MEDIA_STOP:
             case KeyEvent.KEYCODE_MEDIA_NEXT:
             case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
@@ -64,9 +72,7 @@ final class ButtonPolicy {
 
             case KeyEvent.KEYCODE_ASSIST:
             case KeyEvent.KEYCODE_VOICE_ASSIST:
-            case KeyEvent.KEYCODE_CALL:
-            case KeyEvent.KEYCODE_ENDCALL:
-                return Category.ASSIST_CALL;
+                return Category.ASSIST;
 
             default:
                 return Category.OTHER;
@@ -79,11 +85,13 @@ final class ButtonPolicy {
         }
 
         switch (category) {
+            case CALL_SAFETY:
+                return true;
             case MEDIA:
                 return config.blockMedia;
             case VOLUME:
                 return config.blockAllVolume || (externalDevice && config.blockExternalVolume);
-            case ASSIST_CALL:
+            case ASSIST:
                 return config.blockAssistCall;
             case OTHER:
             default:

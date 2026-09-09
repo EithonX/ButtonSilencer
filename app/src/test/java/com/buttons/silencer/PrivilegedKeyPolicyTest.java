@@ -9,11 +9,13 @@ import org.junit.Test;
 
 public final class PrivilegedKeyPolicyTest {
     @Test
-    public void blocksHeadsetAndMediaKeys() {
+    public void blocksHeadsetMediaAndCallKeys() {
         assertTrue(PrivilegedKeyPolicy.shouldBlock(KeyEvent.KEYCODE_HEADSETHOOK));
         assertTrue(PrivilegedKeyPolicy.shouldBlock(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE));
         assertTrue(PrivilegedKeyPolicy.shouldBlock(KeyEvent.KEYCODE_MEDIA_NEXT));
         assertTrue(PrivilegedKeyPolicy.shouldBlock(KeyEvent.KEYCODE_MEDIA_PREVIOUS));
+        assertTrue(PrivilegedKeyPolicy.shouldBlock(KeyEvent.KEYCODE_CALL));
+        assertTrue(PrivilegedKeyPolicy.shouldBlock(KeyEvent.KEYCODE_ENDCALL));
     }
 
     @Test

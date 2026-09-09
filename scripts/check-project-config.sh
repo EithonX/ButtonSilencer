@@ -17,11 +17,14 @@ aidl_path = app / 'src/main/aidl/com/buttons/silencer/IPrivilegedBlocker.aidl'
 service_path = app / 'src/main/java/com/buttons/silencer/PrivilegedMediaKeyService.java'
 controller_path = app / 'src/main/java/com/buttons/silencer/ShizukuController.java'
 main_activity_path = app / 'src/main/java/com/buttons/silencer/MainActivity.java'
+evdev_bridge_path = app / 'src/main/java/com/buttons/silencer/EvdevExclusiveGuard.java'
+native_source_path = app / 'src/main/cpp/evgrab.c'
+proguard_path = app / 'proguard-rules.pro'
 workflow_path = root / '.github/workflows/build-apk.yml'
 strings_path = app / 'src/main/res/values/strings.xml'
 workflow = workflow_path.read_text(encoding='utf-8')
 
-required = [manifest_path, aidl_path, service_path, controller_path, main_activity_path, workflow_path, strings_path]
+required = [manifest_path, aidl_path, service_path, controller_path, main_activity_path, evdev_bridge_path, native_source_path, proguard_path, workflow_path, strings_path]
 for path in required:
     if not path.is_file():
         raise SystemExit(f'Missing required file: {path}')
@@ -44,7 +47,9 @@ checks = {
     'CI captures full Gradle log': 'tee .ci/gradle.log' in workflow and '.ci/gradle.log' in workflow,
     'APK alignment verification': 'zipalign' in workflow and '-P 16 -v 4' in workflow,
     'APK signature verification': 'apksigner' in workflow,
-    '3.1.4 CI version base': '314000 + GITHUB_RUN_NUMBER' in workflow,
+    '3.1.5 CI version base': '315000 + GITHUB_RUN_NUMBER' in workflow,
+    'JNI class preserved for release': 'com.buttons.silencer.EvdevExclusiveGuard' in proguard_path.read_text(encoding='utf-8'),
+    'obsolete audio mutation permission removed': 'android.permission.MODIFY_AUDIO_SETTINGS' not in manifest_path.read_text(encoding='utf-8'),
 }
 for label, ok in checks.items():
     if not ok:
@@ -158,13 +163,84 @@ for required_text in (
     'initializeMediaFrameworkIfNeeded();',
     'android.media.MediaFrameworkPlatformInitializer',
     '/system/bin/getevent',
-    'setStreamVolume',
+    'EvdevExclusiveGuard.setGrab',
+    'ParcelFileDescriptor.open',
+    'resolveSelectedDevices',
+    'reconcileVolumeGuardLocked',
+    'scheduleInputTopologyReconcileLocked',
+    'exclusiveGrabSafe',
     'getStateFlags()',
     'setDiagnosticLogging(boolean requestedEnabled)',
 ):
     if required_text not in service:
         raise SystemExit(f'Privileged service check failed: {required_text}')
 
+
+# The raw call-safety route is packaged as four tiny prebuilt JNI libraries so CI does not need an
+# NDK download. Validate their ABI, lack of libc dependencies, 16 KiB load alignment, and JNI symbol.
+import shutil
+import subprocess
+
+readelf = shutil.which('readelf')
+if not readelf:
+    raise SystemExit('Native guard check failed: readelf is unavailable')
+expected_machines = {
+    'arm64-v8a': 'AArch64',
+    'armeabi-v7a': 'ARM',
+    'x86': 'Intel 80386',
+    'x86_64': 'Advanced Micro Devices X86-64',
+}
+for abi, machine in expected_machines.items():
+    lib = app / 'src/main/jniLibs' / abi / 'libbuttonsilencer_evgrab.so'
+    if not lib.is_file() or lib.stat().st_size == 0:
+        raise SystemExit(f'Native guard check failed: missing {lib}')
+    header = subprocess.check_output([readelf, '-h', str(lib)], text=True)
+    if f'Machine:                           {machine}' not in header:
+        raise SystemExit(f'Native guard check failed: wrong machine for {abi}')
+    dynamic = subprocess.check_output([readelf, '-d', str(lib)], text=True)
+    if '(NEEDED)' in dynamic:
+        raise SystemExit(f'Native guard check failed: {abi} unexpectedly has DT_NEEDED dependencies')
+    program = subprocess.check_output([readelf, '-lW', str(lib)], text=True)
+    load_lines = [line for line in program.splitlines() if line.lstrip().startswith('LOAD ')]
+    if not load_lines or any(int(line.split()[-1], 16) < 0x4000 for line in load_lines):
+        raise SystemExit(f'Native guard check failed: {abi} LOAD alignment is below 16 KiB')
+    symbols = subprocess.check_output([readelf, '-Ws', str(lib)], text=True)
+    if 'Java_com_buttons_silencer_EvdevExclusiveGuard_nativeSetGrab' not in symbols:
+        raise SystemExit(f'Native guard check failed: JNI symbol missing from {abi}')
+
+native_source = native_source_path.read_text(encoding='utf-8')
+if 'EVIOCGRAB_REQUEST 0x40044590UL' not in native_source:
+    raise SystemExit('Native guard check failed: EVIOCGRAB request constant changed')
+# Linux evdev treats EVIOCGRAB's third ioctl argument itself as a boolean pointer value:
+# non-zero grabs, zero releases. Passing &arg is a dangerous regression because even a zero int
+# then has a non-zero address and cannot perform a normal ungrab.
+if 'unsigned long arg = enabled ? 1UL : 0UL;' not in native_source:
+    raise SystemExit('Native guard check failed: EVIOCGRAB boolean argument semantics changed')
+if 'raw_ioctl(fd, EVIOCGRAB_REQUEST, arg)' not in native_source:
+    raise SystemExit('Native guard check failed: EVIOCGRAB value argument call missing')
+if re.search(r'raw_ioctl\s*\([^;\n]*&arg', native_source):
+    raise SystemExit('Native guard check failed: EVIOCGRAB must pass value 1/0, never &arg')
+if 'nativeSetGrab' not in evdev_bridge_path.read_text(encoding='utf-8'):
+    raise SystemExit('Native guard check failed: Java bridge method missing')
+
+
+# While a composite device is only partially acquired, already-grabbed nodes must keep being
+# drained. Tying reader lifetime to volumeGuardActive would release/stop the healthy part exactly
+# when another node is recovering.
+reader_start = service.find('private void drainGrabbedInput(GrabbedInput input)')
+reader_end = service.find('private static String joinPaths', reader_start)
+if reader_start < 0 or reader_end < 0:
+    raise SystemExit('Raw guard check failed: input reader method not found')
+reader_body = service[reader_start:reader_end]
+if 'grabbedInputs.contains(input)' not in reader_body:
+    raise SystemExit('Raw guard check failed: reader is not tied to held input membership')
+if 'if (!volumeGuardEnabled || !volumeGuardActive' in reader_body:
+    raise SystemExit('Raw guard check failed: partial topology recovery would stop held readers')
+
+parser_source = (app / 'src/main/java/com/buttons/silencer/VolumeInputDeviceParser.java').read_text(encoding='utf-8')
+for safety_marker in ('SW_HEADPHONE_INSERT', 'SW_MICROPHONE_INSERT', 'exclusiveGrabSafe', 'containsTypingKey', 'KEY_SEND', 'KEY_FORWARDMAIL'):
+    if safety_marker not in parser_source:
+        raise SystemExit(f'Raw guard safety regression: missing {safety_marker}')
 
 controller = controller_path.read_text(encoding='utf-8')
 if 'private final Runnable reconnectRunnable;' not in controller:
@@ -196,6 +272,18 @@ if 'requestSetupConnection()' not in controller or 'setupConnectionRequested' no
     raise SystemExit('Shizuku setup check failed: temporary setup connection path is missing')
 if '!Preferences.privilegedProtectionRequested(context) && !setupConnectionRequested' not in controller:
     raise SystemExit('Shizuku setup check failed: setup connection cannot bypass protection preference')
+
+if 'effectiveEnabled = !safeDevice.isEmpty()' not in controller or 'Preferences.privilegedMediaEnabled(context)' not in controller:
+    raise SystemExit('Call-safety regression: selected raw guard is not coupled to screen-off protection')
+if 'boolean rawGuardRequested = !selectedDevice.isEmpty()' not in controller \
+        or 'Preferences.headsetVolumeGuardEnabled(context) || mediaRequested' not in controller:
+    raise SystemExit('Call-safety regression: stale preferences can start media protection without raw guard')
+button_policy = (app / 'src/main/java/com/buttons/silencer/ButtonPolicy.java').read_text(encoding='utf-8')
+for safety_key in ('KEYCODE_HEADSETHOOK', 'KEYCODE_MEDIA_PLAY_PAUSE', 'KEYCODE_CALL', 'KEYCODE_ENDCALL'):
+    if safety_key not in button_policy:
+        raise SystemExit(f'Call-safety regression: {safety_key} is missing from ButtonPolicy')
+if 'case CALL_SAFETY:' not in button_policy or 'return true;' not in button_policy[button_policy.find('case CALL_SAFETY:'):]:
+    raise SystemExit('Call-safety regression: safety-critical keys are not unconditional while master is on')
 
 print(f'Project preflight passed: {len(xml_files)} XML files, {len(ids)} view IDs.')
 PY

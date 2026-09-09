@@ -20,7 +20,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -223,6 +225,15 @@ public final class MainActivity extends Activity {
                 scanVolumeInputDevices();
                 return;
             }
+            if (!checked && Preferences.privilegedMediaEnabled(this)) {
+                // A selected headset's raw guard is the call-safety route. Do not let an advanced
+                // toggle silently downgrade protection while screen-off Shizuku blocking is on.
+                updatingUi = true;
+                button.setChecked(true);
+                updatingUi = false;
+                Toast.makeText(this, R.string.raw_guard_required, Toast.LENGTH_LONG).show();
+                return;
+            }
             shizukuController.setHeadsetVolumeGuard(selected, checked);
             refreshUi();
         });
@@ -346,7 +357,10 @@ public final class MainActivity extends Activity {
         protectionSwitch.setEnabled(true);
         mediaListenerSwitch.setChecked(mediaDesired);
         headsetVolumeGuardSwitch.setChecked(volumeDesired);
-        headsetVolumeGuardSwitch.setEnabled(!selected.isEmpty());
+        // While the screen-off media route is requested, a selected headset's raw guard is a
+        // safety dependency, not an independent preference. Present it as locked rather than
+        // letting the user toggle it only to be bounced back by a toast.
+        headsetVolumeGuardSwitch.setEnabled(!selected.isEmpty() && !mediaDesired);
         diagnosticLoggingSwitch.setChecked(Preferences.diagnosticLoggingEnabled(this));
         accessibilityMediaSwitch.setChecked(Preferences.blockMedia(this));
         accessibilityExternalVolumeSwitch.setChecked(Preferences.blockExternalVolume(this));
@@ -403,7 +417,7 @@ public final class MainActivity extends Activity {
     private void updateProtectionStatus(
             boolean protectionDesired,
             boolean mediaDesired,
-            boolean volumeDesired,
+            boolean rawGuardDesired,
             boolean accessibilityActive,
             boolean hasSelectedDevice,
             int stateFlags
@@ -412,14 +426,13 @@ public final class MainActivity extends Activity {
         boolean mediaReady = remoteConnected
                 && mediaDesired
                 && (stateFlags & PrivilegedState.MEDIA_ENABLED) != 0;
-        boolean volumeReady = remoteConnected
-                && volumeDesired
+        boolean rawGuardReady = remoteConnected
+                && rawGuardDesired
                 && (stateFlags & PrivilegedState.VOLUME_GUARD_ACTIVE) != 0;
         boolean hasError = remoteConnected
                 && (stateFlags & PrivilegedState.HAS_ERROR) != 0;
-        boolean privilegedReady = mediaReady
-                && (!volumeDesired || volumeReady)
-                && !hasError;
+        boolean callSafeScreenOff = hasSelectedDevice && rawGuardReady && !hasError;
+        boolean privilegedRequested = mediaDesired || rawGuardDesired;
 
         if (!protectionDesired) {
             applyStatus(
@@ -432,14 +445,14 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        // Accessibility is the preferred screen-on path. A Shizuku outage must never make the
-        // whole app look or behave disabled while Accessibility is still actively filtering keys.
-        if (accessibilityActive && privilegedReady) {
+        // Full/green status is intentionally strict. The MediaSession listener is useful for normal
+        // screen-off media routing, but it is not the call-safety guarantee: Android can bypass that
+        // listener for global-priority sessions. A selected headset is only shown as fully protected
+        // when its raw evdev nodes are exclusively guarded.
+        if (accessibilityActive && callSafeScreenOff) {
             applyStatus(
                     R.string.protection_active,
-                    hasSelectedDevice && volumeDesired
-                            ? R.string.protection_active_full_detail
-                            : R.string.protection_active_media_only_detail,
+                    R.string.protection_active_full_detail,
                     R.drawable.bg_status_active,
                     R.color.status_active
             );
@@ -450,22 +463,22 @@ public final class MainActivity extends Activity {
         if (accessibilityActive) {
             applyStatus(
                     R.string.protection_screen_on_only,
-                    mediaDesired || volumeDesired
+                    mediaReady && !callSafeScreenOff
+                            ? R.string.protection_screen_on_media_only_detail
+                            : (privilegedRequested
                             ? R.string.protection_screen_on_only_detail
-                            : R.string.protection_screen_on_only_disabled_detail,
+                            : R.string.protection_screen_on_only_disabled_detail),
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
-            configureShizukuRecoveryAction(mediaDesired || volumeDesired);
+            configureShizukuRecoveryAction(privilegedRequested && !callSafeScreenOff);
             return;
         }
 
-        if (privilegedReady) {
+        if (callSafeScreenOff) {
             applyStatus(
                     R.string.protection_screen_off_only,
-                    hasSelectedDevice && volumeDesired
-                            ? R.string.protection_screen_off_only_detail
-                            : R.string.protection_screen_off_media_only_detail,
+                    R.string.protection_screen_off_only_detail,
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
@@ -509,14 +522,23 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        applyStatus(
-                R.string.protection_partial,
-                R.string.protection_partial_detail,
-                R.drawable.bg_status_warning,
-                R.color.status_warning
-        );
+        if (mediaReady && !callSafeScreenOff) {
+            applyStatus(
+                    R.string.protection_partial,
+                    R.string.protection_screen_off_media_only_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+        } else {
+            applyStatus(
+                    R.string.protection_partial,
+                    R.string.protection_partial_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+        }
         reconnectShizukuButton.setText(R.string.retry_protection);
-        reconnectShizukuButton.setVisibility(View.VISIBLE);
+        reconnectShizukuButton.setVisibility(privilegedRequested ? View.VISIBLE : View.GONE);
     }
 
     private void configureShizukuRecoveryAction(boolean privilegedRequested) {
@@ -623,6 +645,7 @@ public final class MainActivity extends Activity {
     private void showDevicePicker(String[] encodedDevices) {
         List<String> values = new ArrayList<>();
         List<String> labels = new ArrayList<>();
+        Set<String> offeredNames = new HashSet<>();
         int ignoredInternalCount = 0;
 
         if (encodedDevices != null) {
@@ -635,8 +658,15 @@ public final class MainActivity extends Activity {
                     ignoredInternalCount++;
                     continue;
                 }
+                // Composite USB audio devices can expose multiple event nodes with the same name.
+                // The privileged guard protects every matching remote-capable node together, so
+                // present one device choice rather than asking the user to guess which node carries
+                // volume versus call/media controls.
+                if (!offeredNames.add(device.name)) {
+                    continue;
+                }
                 values.add(encoded);
-                labels.add(VolumeInputDeviceParser.displayLabel(encoded));
+                labels.add(device.name);
             }
         }
 
@@ -657,8 +687,8 @@ public final class MainActivity extends Activity {
                 .setTitle(R.string.choose_headset_device)
                 .setItems(items, (dialog, index) -> {
                     String selected = values.get(index);
-                    // Selecting a headset while global protection is already requested should
-                    // immediately add the screen-off volume route. When protection is off we only
+                    // Selecting a headset while global protection is already requested immediately
+                    // arms the exclusive raw-input safety route. When protection is off we only
                     // remember the device for later.
                     boolean enableVolumeGuard = Preferences.privilegedMediaEnabled(this)
                             || Preferences.headsetVolumeGuardEnabled(this);

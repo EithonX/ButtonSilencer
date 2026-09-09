@@ -28,7 +28,7 @@ final class ShizukuController {
 
     private static final int REQUEST_CODE = 49021;
     private static final int MIN_PRIVILEGED_API = Build.VERSION_CODES.O;
-    private static final long[] REBIND_DELAYS_MS = {750L, 2_000L, 5_000L, 15_000L, 30_000L};
+    private static final long[] REBIND_DELAYS_MS = {250L, 1_000L, 3_000L, 10_000L, 30_000L};
     private static final long BIND_TIMEOUT_MS = 8_000L;
 
     private final Context context;
@@ -237,20 +237,21 @@ final class ShizukuController {
 
     void setMediaListenerEnabled(boolean enabled) {
         Preferences.putBoolean(context, Preferences.KEY_PRIVILEGED_MEDIA, enabled);
+        String selected = Preferences.headsetVolumeDevice(context);
+        if (enabled && !selected.isEmpty()) {
+            // Screen-off media protection plus a selected headset always arms the stronger raw
+            // input safety route as well. The media-session listener alone can be bypassed by
+            // global-priority sessions such as calls.
+            Preferences.putBoolean(context, Preferences.KEY_HEADSET_VOLUME_GUARD, true);
+        }
+
         IPrivilegedBlocker current = remote;
         if (enabled && current == null) {
             requestPermissionOrConnect();
             return;
         }
         if (current != null) {
-            try {
-                current.setEnabled(enabled);
-                setLocalStatus(enabled
-                        ? "Privileged media-key listener enabled"
-                        : "Privileged media-key listener disabled");
-            } catch (RemoteException exception) {
-                handleRemoteFailure("Media listener update failed", exception);
-            }
+            applyDesiredState();
         }
         stopServiceIfUnused();
         notifyObservers();
@@ -272,30 +273,29 @@ final class ShizukuController {
 
     void setHeadsetVolumeGuard(String encodedDevice, boolean enabled) {
         String safeDevice = encodedDevice == null ? "" : encodedDevice;
+        boolean effectiveEnabled = !safeDevice.isEmpty()
+                && (enabled || Preferences.privilegedMediaEnabled(context));
         Preferences.putString(context, Preferences.KEY_HEADSET_VOLUME_DEVICE, safeDevice);
         Preferences.putBoolean(
                 context,
                 Preferences.KEY_HEADSET_VOLUME_GUARD,
-                enabled && !safeDevice.isEmpty()
+                effectiveEnabled
         );
 
         IPrivilegedBlocker current = remote;
-        if (enabled && current == null) {
+        if (effectiveEnabled && current == null) {
             requestPermissionOrConnect();
             return;
         }
         if (current != null) {
             try {
-                boolean active = current.setHeadsetVolumeGuard(
-                        safeDevice,
-                        enabled && !safeDevice.isEmpty()
-                );
+                boolean active = current.setHeadsetVolumeGuard(safeDevice, effectiveEnabled);
                 setLocalStatus(active
-                        ? "Headset volume guard active"
-                        : (enabled ? "Headset volume guard is recovering"
-                                : "Headset volume guard off"));
+                        ? "Selected-headset safety guard active"
+                        : (effectiveEnabled ? "Selected-headset safety guard is recovering"
+                                : "Selected-headset safety guard off"));
             } catch (RemoteException exception) {
-                handleRemoteFailure("Headset volume guard failed", exception);
+                handleRemoteFailure("Selected-headset safety guard failed", exception);
             }
         }
         stopServiceIfUnused();
@@ -467,15 +467,27 @@ final class ShizukuController {
                 setLocalStatus("Privileged setup connection ready");
                 return;
             }
-            boolean mediaActive = current.setEnabled(
-                    Preferences.privilegedMediaEnabled(context)
-            );
+            boolean mediaRequested = Preferences.privilegedMediaEnabled(context);
+            String selectedDevice = Preferences.headsetVolumeDevice(context);
+            boolean rawGuardRequested = !selectedDevice.isEmpty()
+                    && (Preferences.headsetVolumeGuardEnabled(context) || mediaRequested);
+            if (rawGuardRequested != Preferences.headsetVolumeGuardEnabled(context)) {
+                // Upgrade/stale-preference safety: screen-off media protection must never start
+                // without the stronger selected-headset raw guard when a device is selected.
+                Preferences.putBoolean(
+                        context,
+                        Preferences.KEY_HEADSET_VOLUME_GUARD,
+                        rawGuardRequested
+                );
+            }
+
+            boolean mediaActive = current.setEnabled(mediaRequested);
             boolean volumeActive = current.setHeadsetVolumeGuard(
-                    Preferences.headsetVolumeDevice(context),
-                    Preferences.headsetVolumeGuardEnabled(context)
+                    selectedDevice,
+                    rawGuardRequested
             );
-            if ((mediaActive || !Preferences.privilegedMediaEnabled(context))
-                    && (volumeActive || !Preferences.headsetVolumeGuardEnabled(context))) {
+            if ((mediaActive || !mediaRequested)
+                    && (volumeActive || !rawGuardRequested)) {
                 reconnectAttempt = 0;
                 setLocalStatus("Headset protection active");
             } else {

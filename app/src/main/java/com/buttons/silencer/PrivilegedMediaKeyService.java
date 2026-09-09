@@ -1,17 +1,17 @@
 package com.buttons.silencer;
 
 import android.annotation.SuppressLint;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.media.AudioManager;
 import android.media.session.MediaSessionManager;
 import android.os.Build;
 import android.os.FileObserver;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.SystemClock;
+import android.os.ParcelFileDescriptor;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
+import android.system.StructPollfd;
 import android.view.KeyEvent;
 
 import java.io.BufferedReader;
@@ -33,10 +33,11 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Runs in a Shizuku UserService process under shell/root identity.
  *
- * <p>The media-key listener consumes headset/media buttons before ordinary media sessions. The
- * optional headset-volume guard observes one explicitly selected evdev input device and restores
- * STREAM_MUSIC after volume presses from that device. It never claims a USB interface and never
- * changes the behavior of the phone's own side buttons.</p>
+ * <p>The media-key listener is a broad screen-off fallback for ordinary media routing. For the
+ * explicitly selected external headset, the raw-input guard uses Linux EVIOCGRAB on every matching
+ * remote-capable evdev node. That exclusive kernel grab keeps media, volume, and call-control
+ * button events from reaching Android at all. The phone's own side-button input nodes are never
+ * selected or grabbed.</p>
  */
 public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private static final String LISTENER_CLASS_NAME =
@@ -44,43 +45,30 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private static final String GETEVENT = "/system/bin/getevent";
     private static final String INPUT_DIR = "/dev/input";
     private static final long[] MEDIA_RECOVERY_DELAYS_MS = {750L, 2_000L, 5_000L};
-    private static final long[] VOLUME_RECOVERY_DELAYS_MS = {750L, 2_500L, 8_000L, 30_000L};
-    private static final String VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION";
-    private static final String EXTRA_VOLUME_STREAM_TYPE =
-            "android.media.EXTRA_VOLUME_STREAM_TYPE";
-    private static final String EXTRA_VOLUME_STREAM_VALUE =
-            "android.media.EXTRA_VOLUME_STREAM_VALUE";
-    private static final String RAW_VOLUME_DOWN_PRESS = "0001 0072 00000001";
-    private static final String RAW_VOLUME_UP_PRESS = "0001 0073 00000001";
+    private static final long[] VOLUME_RECOVERY_DELAYS_MS = {250L, 1_000L, 3_000L, 10_000L, 30_000L};
+    private static final long INPUT_TOPOLOGY_RECONCILE_DELAY_MS = 25L;
 
     private final Object lock = new Object();
     private final HandlerThread callbackThread;
     private final Handler callbackHandler;
     private final Runnable mediaRecoveryRunnable;
     private final Runnable volumeRecoveryRunnable;
-    private final Runnable volumeRestoreRunnable;
-    private final Runnable volumeRestoreFinishRunnable;
+    private final Runnable inputTopologyReconcileRunnable;
     private final AtomicInteger interceptedCount = new AtomicInteger();
-    private final AtomicInteger neutralizedVolumeCount = new AtomicInteger();
+    private final AtomicInteger suppressedRawReadCount = new AtomicInteger();
+    private final List<GrabbedInput> grabbedInputs = new ArrayList<>();
 
     private final Context context;
     private Object mediaSessionManager;
     private Object mediaKeyListenerProxy;
     private Method setOnMediaKeyListenerMethod;
 
-    private AudioManager audioManager;
-    private Process volumeMonitorProcess;
-    private Thread volumeMonitorThread;
-    private BroadcastReceiver volumeReceiver;
     private FileObserver inputObserver;
-    private int stableMediaVolume = -1;
-    private int pendingRestoreVolume = -1;
-    private long suppressVolumeUpdatesUntil;
-    private boolean volumeRestoreCycleScheduled;
     private int mediaRecoveryAttempt;
     private int volumeRecoveryAttempt;
     private boolean mediaRecoveryScheduled;
     private boolean volumeRecoveryScheduled;
+    private boolean inputTopologyReconcileScheduled;
 
     private volatile boolean enabled;
     private volatile boolean registered;
@@ -93,7 +81,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private volatile String volumeGuardError = "";
     private volatile String volumeGuardWarning = "";
     private volatile String lastEvent = "No privileged media-key event received yet";
-    private volatile String lastVolumeEvent = "No selected-headset volume event received yet";
+    private volatile String lastVolumeEvent = "No selected-headset raw input received yet";
 
     /** Used by Shizuku versions older than v13. Privileged mode will report a clear error. */
     public PrivilegedMediaKeyService() {
@@ -108,8 +96,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         callbackHandler = new Handler(callbackThread.getLooper());
         mediaRecoveryRunnable = this::recoverMediaListener;
         volumeRecoveryRunnable = this::recoverVolumeGuard;
-        volumeRestoreRunnable = () -> restorePendingVolume(false);
-        volumeRestoreFinishRunnable = () -> restorePendingVolume(true);
+        inputTopologyReconcileRunnable = this::reconcileInputTopology;
     }
 
     @Override
@@ -164,7 +151,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         diagnosticLoggingEnabled = requestedEnabled;
         if (!requestedEnabled) {
             lastEvent = "Detailed media-event logging is off";
-            lastVolumeEvent = "Detailed volume-event logging is off";
+            lastVolumeEvent = "Detailed raw-input logging is off";
         }
     }
 
@@ -184,8 +171,8 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             builder.append("\nMedia-listener error: ").append(lastError);
         }
 
-        builder.append("\n\nHeadset volume guard: ")
-                .append(volumeGuardActive ? "ACTIVE"
+        builder.append("\n\nSelected-headset raw guard: ")
+                .append(volumeGuardActive ? "ACTIVE / EXCLUSIVE"
                         : (volumeGuardEnabled ? "NOT ACTIVE" : "OFF"))
                 .append('\n');
         builder.append("Selected device: ")
@@ -194,18 +181,18 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                         : VolumeInputDeviceParser.displayLabel(selectedVolumeDevice))
                 .append('\n');
         if (!selectedResolvedPath.isEmpty()) {
-            builder.append("Monitoring: ").append(selectedResolvedPath).append('\n');
+            builder.append("Exclusive input nodes: ").append(selectedResolvedPath).append('\n');
         }
-        builder.append("Neutralized volume presses: ")
-                .append(neutralizedVolumeCount.get()).append('\n');
+        builder.append("Suppressed raw input reads: ")
+                .append(suppressedRawReadCount.get()).append('\n');
         builder.append(diagnosticLoggingEnabled
                 ? lastVolumeEvent
-                : "Detailed volume-event logging is off");
+                : "Detailed raw-input logging is off");
         if (volumeGuardEnabled && !volumeGuardError.isEmpty()) {
-            builder.append("\nVolume-guard error: ").append(volumeGuardError);
+            builder.append("\nRaw-guard error: ").append(volumeGuardError);
         }
         if (volumeGuardEnabled && !volumeGuardWarning.isEmpty()) {
-            builder.append("\nVolume-guard note: ").append(volumeGuardWarning);
+            builder.append("\nRaw-guard note: ").append(volumeGuardWarning);
         }
         if (volumeGuardEnabled && !volumeGuardActive) {
             builder.append("\nAuto-recovery: armed (event-driven with bounded retry)");
@@ -222,7 +209,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                 encoded.add(VolumeInputDeviceParser.encode(device));
             }
             volumeGuardError = devices.isEmpty()
-                    ? "No input device advertising volume keys was found"
+                    ? "No external-control input node was found"
                     : "";
             return encoded.toArray(new String[0]);
         } catch (Exception exception) {
@@ -323,6 +310,10 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             scheduleVolumeRecoveryLocked();
             return;
         }
+        if (!EvdevExclusiveGuard.isAvailable()) {
+            volumeGuardError = "Exclusive input guard unavailable: " + EvdevExclusiveGuard.loadError();
+            return;
+        }
 
         VolumeInputDeviceParser.Device requested =
                 VolumeInputDeviceParser.decode(selectedVolumeDevice);
@@ -336,67 +327,188 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             return;
         }
 
+        reconcileVolumeGuardLocked(requested);
+    }
+
+    /**
+     * Makes the held EVIOCGRAB set match every currently visible remote-capable node for the
+     * selected headset name. Existing healthy grabs stay in place while newly appeared composite
+     * nodes are acquired, so a USB topology update does not create an avoidable call-safety gap.
+     */
+    private void reconcileVolumeGuardLocked(VolumeInputDeviceParser.Device requested) {
+        if (!volumeGuardEnabled) {
+            return;
+        }
+
         try {
-            VolumeInputDeviceParser.Device resolved = resolveSelectedDevice(requested);
-            if (resolved == null) {
+            List<VolumeInputDeviceParser.Device> resolved = resolveSelectedDevices(requested);
+            if (resolved.isEmpty()) {
+                volumeGuardActive = false;
                 volumeGuardError = "Selected headset input device is not currently connected";
+                clearExclusiveGuardLocked(null);
                 scheduleVolumeRecoveryLocked();
                 return;
             }
 
-            audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-            if (audioManager == null) {
-                volumeGuardError = "AudioManager is unavailable in the Shizuku process";
-                scheduleVolumeRecoveryLocked();
+            for (VolumeInputDeviceParser.Device device : resolved) {
+                if (!device.exclusiveGrabSafe) {
+                    // EVIOCGRAB owns the whole event node. Never take exclusive ownership of a
+                    // mixed keyboard or a node that also carries jack/audio-route switch state.
+                    // That could disable unrelated input or hide an unplug/routing transition.
+                    volumeGuardActive = false;
+                    volumeGuardError = "Cannot safely exclusively guard " + device.path + ": "
+                            + device.unsafeGrabReason;
+                    clearExclusiveGuardLocked(null);
+                    cancelVolumeRecoveryLocked();
+                    return;
+                }
+            }
+
+            List<GrabbedInput> stale = new ArrayList<>();
+            for (GrabbedInput input : grabbedInputs) {
+                if (!containsPath(resolved, input.device.path)) {
+                    stale.add(input);
+                }
+            }
+            for (GrabbedInput input : stale) {
+                removeGrabbedInputLocked(input);
+            }
+
+            String acquisitionError = "";
+            for (VolumeInputDeviceParser.Device device : resolved) {
+                if (findGrabbedInputByPath(device.path) != null) {
+                    continue;
+                }
+                try {
+                    GrabbedInput input = acquireInput(device);
+                    grabbedInputs.add(input);
+                    startInputReader(input);
+                } catch (Exception exception) {
+                    if (acquisitionError.isEmpty()) {
+                        acquisitionError = concise(exception);
+                    }
+                }
+            }
+
+            selectedResolvedPath = joinPaths(grabbedInputs);
+            boolean complete = !grabbedInputs.isEmpty()
+                    && grabbedInputs.size() == resolved.size()
+                    && allResolvedPathsGrabbed(resolved);
+            volumeGuardActive = complete;
+
+            if (complete) {
+                volumeGuardError = "";
+                volumeRecoveryAttempt = 0;
+                cancelVolumeRecoveryLocked();
                 return;
             }
 
-            stableMediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            registerVolumeReceiverLocked();
-
-            Process process = new ProcessBuilder(GETEVENT, "-q", resolved.path)
-                    .redirectErrorStream(true)
-                    .start();
-            volumeMonitorProcess = process;
-            selectedResolvedPath = resolved.path;
-            volumeGuardActive = true;
-            volumeRecoveryAttempt = 0;
-            cancelVolumeRecoveryLocked();
-
-            Thread readerThread = new Thread(
-                    () -> readVolumeEvents(process, resolved),
-                    "ButtonSilencerGetEvent"
-            );
-            readerThread.setDaemon(true);
-            volumeMonitorThread = readerThread;
-            readerThread.start();
+            volumeGuardError = acquisitionError.isEmpty()
+                    ? "Selected headset has an unguarded control node; retrying"
+                    : acquisitionError;
+            scheduleVolumeRecoveryLocked();
         } catch (Exception exception) {
+            volumeGuardActive = false;
             volumeGuardError = concise(exception);
-            clearVolumeMonitorLocked(null);
+            if (grabbedInputs.isEmpty()) {
+                selectedResolvedPath = "";
+            }
             if (volumeGuardEnabled) {
                 scheduleVolumeRecoveryLocked();
             }
         }
     }
 
-    private VolumeInputDeviceParser.Device resolveSelectedDevice(
-            VolumeInputDeviceParser.Device requested
-    ) throws Exception {
-        List<VolumeInputDeviceParser.Device> devices = scanVolumeDevices();
-        for (VolumeInputDeviceParser.Device candidate : devices) {
-            if (!candidate.likelyInternal
-                    && candidate.path.equals(requested.path)
-                    && candidate.name.equals(requested.name)) {
-                return candidate;
+    private GrabbedInput acquireInput(VolumeInputDeviceParser.Device device) throws Exception {
+        ParcelFileDescriptor descriptor = null;
+        ParcelFileDescriptor cancelRead = null;
+        ParcelFileDescriptor cancelWrite = null;
+        try {
+            descriptor = ParcelFileDescriptor.open(
+                    new File(device.path),
+                    ParcelFileDescriptor.MODE_READ_ONLY
+            );
+            ParcelFileDescriptor[] cancelPipe = ParcelFileDescriptor.createPipe();
+            cancelRead = cancelPipe[0];
+            cancelWrite = cancelPipe[1];
+
+            GrabbedInput input = new GrabbedInput(device, descriptor, cancelRead, cancelWrite);
+            int errno = EvdevExclusiveGuard.setGrab(descriptor.getFd(), true);
+            if (errno != 0) {
+                throw new IOException(
+                        "Could not exclusively guard " + device.path + ": "
+                                + EvdevExclusiveGuard.describeError(errno)
+                );
             }
+            input.grabbed = true;
+            return input;
+        } catch (Exception exception) {
+            closeQuietly(descriptor);
+            closeQuietly(cancelRead);
+            closeQuietly(cancelWrite);
+            throw exception;
         }
-        for (VolumeInputDeviceParser.Device candidate : devices) {
-            if (!candidate.likelyInternal && candidate.name.equals(requested.name)) {
-                selectedVolumeDevice = VolumeInputDeviceParser.encode(candidate);
-                return candidate;
+    }
+
+    private void startInputReader(GrabbedInput input) {
+        Thread reader = new Thread(
+                () -> drainGrabbedInput(input),
+                "ButtonSilencerEvdev-" + input.device.path.substring(
+                        input.device.path.lastIndexOf('/') + 1
+                )
+        );
+        reader.setDaemon(true);
+        input.readerThread = reader;
+        reader.start();
+    }
+
+    private GrabbedInput findGrabbedInputByPath(String path) {
+        for (GrabbedInput input : grabbedInputs) {
+            if (input.device.path.equals(path)) {
+                return input;
             }
         }
         return null;
+    }
+
+    private static boolean containsPath(
+            List<VolumeInputDeviceParser.Device> devices,
+            String path
+    ) {
+        for (VolumeInputDeviceParser.Device device : devices) {
+            if (device.path.equals(path)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean allResolvedPathsGrabbed(List<VolumeInputDeviceParser.Device> devices) {
+        for (VolumeInputDeviceParser.Device device : devices) {
+            if (findGrabbedInputByPath(device.path) == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Re-resolves the selected external device by name and returns every remote-capable event node
+     * with that name. Event numbers can change after USB reconnects, and composite USB audio devices
+     * can expose call/media and volume controls as separate nodes.
+     */
+    private List<VolumeInputDeviceParser.Device> resolveSelectedDevices(
+            VolumeInputDeviceParser.Device requested
+    ) throws Exception {
+        List<VolumeInputDeviceParser.Device> devices = scanVolumeDevices();
+        List<VolumeInputDeviceParser.Device> matches = new ArrayList<>();
+
+        for (VolumeInputDeviceParser.Device candidate : devices) {
+            if (!candidate.likelyInternal && candidate.name.equals(requested.name)) {
+                matches.add(candidate);
+            }
+        }
+        return matches;
     }
 
     private List<VolumeInputDeviceParser.Device> scanVolumeDevices() throws Exception {
@@ -439,163 +551,131 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         return VolumeInputDeviceParser.parse(output.toString());
     }
 
-    private void readVolumeEvents(
-            Process process,
-            VolumeInputDeviceParser.Device selectedDevice
-    ) {
-        String failure = "Input monitor stopped; waiting for the headset input node";
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                process.getInputStream(), StandardCharsets.UTF_8
-        ))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!volumeGuardEnabled || process != volumeMonitorProcess) {
+    private void drainGrabbedInput(GrabbedInput input) {
+        String failure = "Input node closed; waiting for the headset to reconnect";
+        byte[] buffer = new byte[384];
+        StructPollfd inputPoll = new StructPollfd();
+        inputPoll.fd = input.descriptor.getFileDescriptor();
+        inputPoll.events = (short) (OsConstants.POLLIN | OsConstants.POLLERR | OsConstants.POLLHUP);
+        StructPollfd cancelPoll = new StructPollfd();
+        cancelPoll.fd = input.cancelRead.getFileDescriptor();
+        cancelPoll.events = (short) (OsConstants.POLLIN | OsConstants.POLLERR | OsConstants.POLLHUP);
+        StructPollfd[] pollSet = {inputPoll, cancelPoll};
+
+        try {
+            while (true) {
+                // Fully event-driven: the thread sleeps in poll() until the headset produces input,
+                // the node disconnects, or shutdown writes to the private cancellation pipe.
+                Os.poll(pollSet, -1);
+
+                synchronized (lock) {
+                    if (!volumeGuardEnabled || !grabbedInputs.contains(input)) {
+                        return;
+                    }
+                }
+
+                int cancelEvents = cancelPoll.revents & 0xffff;
+                if ((cancelEvents & (OsConstants.POLLIN
+                        | OsConstants.POLLERR
+                        | OsConstants.POLLHUP
+                        | OsConstants.POLLNVAL)) != 0) {
                     return;
                 }
-                String event = line.trim();
-                if (RAW_VOLUME_UP_PRESS.equals(event)) {
-                    handleSelectedHeadsetVolumePress(selectedDevice, true);
-                } else if (RAW_VOLUME_DOWN_PRESS.equals(event)) {
-                    handleSelectedHeadsetVolumePress(selectedDevice, false);
+
+                int inputEvents = inputPoll.revents & 0xffff;
+                if ((inputEvents & OsConstants.POLLIN) != 0) {
+                    int read = Os.read(input.descriptor.getFileDescriptor(), buffer, 0, buffer.length);
+                    if (read > 0) {
+                        int count = suppressedRawReadCount.incrementAndGet();
+                        if (diagnosticLoggingEnabled) {
+                            lastVolumeEvent = "SUPPRESSED raw headset input\n"
+                                    + input.device.name + "  " + input.device.path
+                                    + "  read=" + read + "B  count=" + count;
+                        }
+                    }
+                }
+                if ((inputEvents & (OsConstants.POLLERR
+                        | OsConstants.POLLHUP
+                        | OsConstants.POLLNVAL)) != 0) {
+                    break;
                 }
             }
-        } catch (IOException exception) {
+        } catch (ErrnoException exception) {
             failure = concise(exception);
         }
 
         synchronized (lock) {
-            if (process == volumeMonitorProcess && volumeGuardEnabled) {
+            if (volumeGuardEnabled && grabbedInputs.contains(input)) {
                 volumeGuardActive = false;
-                selectedResolvedPath = "";
                 volumeGuardError = failure;
-                clearVolumeMonitorLocked(process);
+                removeGrabbedInputLocked(input);
                 volumeRecoveryAttempt = 0;
                 scheduleVolumeRecoveryLocked();
             }
         }
     }
 
-    private void handleSelectedHeadsetVolumePress(
-            VolumeInputDeviceParser.Device device,
-            boolean volumeUp
-    ) {
-        final int targetVolume;
-        synchronized (lock) {
-            if (!volumeGuardEnabled || !volumeGuardActive || audioManager == null) {
-                return;
+    private static String joinPaths(List<GrabbedInput> inputs) {
+        StringBuilder builder = new StringBuilder();
+        for (GrabbedInput input : inputs) {
+            if (builder.length() > 0) {
+                builder.append(", ");
             }
-            int observed = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            long now = SystemClock.uptimeMillis();
-            if (now >= suppressVolumeUpdatesUntil && observed != stableMediaVolume) {
-                stableMediaVolume = observed;
-            }
-            targetVolume = stableMediaVolume >= 0 ? stableMediaVolume : observed;
-            pendingRestoreVolume = targetVolume;
-            suppressVolumeUpdatesUntil = now + 700L;
-
-            // A faulty inline remote can emit a burst of repeated key-down events. Keep at most one
-            // small restore cycle in the Handler queue; subsequent events only refresh the target.
-            if (!volumeRestoreCycleScheduled) {
-                volumeRestoreCycleScheduled = true;
-                callbackHandler.postDelayed(volumeRestoreRunnable, 25L);
-                callbackHandler.postDelayed(volumeRestoreRunnable, 90L);
-                callbackHandler.postDelayed(volumeRestoreFinishRunnable, 220L);
-            }
+            builder.append(input.device.path);
         }
-
-        int count = neutralizedVolumeCount.incrementAndGet();
-        if (diagnosticLoggingEnabled) {
-            lastVolumeEvent = "NEUTRALIZING " + (volumeUp ? "VOLUME_UP" : "VOLUME_DOWN")
-                    + "\n" + device.name + "  count=" + count;
-        }
+        return builder.toString();
     }
 
-    private void restorePendingVolume(boolean finishCycle) {
-        final AudioManager manager;
-        final int targetVolume;
-        synchronized (lock) {
-            if (!volumeGuardEnabled || !volumeGuardActive
-                    || audioManager == null || pendingRestoreVolume < 0) {
-                if (finishCycle) {
-                    volumeRestoreCycleScheduled = false;
-                }
-                return;
-            }
-            manager = audioManager;
-            targetVolume = pendingRestoreVolume;
-        }
-
-        try {
-            int current = manager.getStreamVolume(AudioManager.STREAM_MUSIC);
-            if (current != targetVolume) {
-                manager.setStreamVolume(
-                        AudioManager.STREAM_MUSIC,
-                        targetVolume,
-                        AudioManager.FLAG_REMOVE_SOUND_AND_VIBRATE
-                );
-            }
-            synchronized (lock) {
-                if (manager == audioManager) {
-                    stableMediaVolume = targetVolume;
-                }
-            }
-        } catch (RuntimeException exception) {
-            volumeGuardError = concise(exception);
-        } finally {
-            if (finishCycle) {
-                synchronized (lock) {
-                    volumeRestoreCycleScheduled = false;
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private void registerVolumeReceiverLocked() {
-        if (volumeReceiver != null || context == null) {
+    private void removeGrabbedInputLocked(GrabbedInput input) {
+        if (input == null || !grabbedInputs.remove(input)) {
             return;
         }
+        List<GrabbedInput> single = new ArrayList<>(1);
+        single.add(input);
+        releaseInputs(single);
+        Thread thread = input.readerThread;
+        input.readerThread = null;
+        if (thread != null && thread != Thread.currentThread()) {
+            thread.interrupt();
+        }
+        selectedResolvedPath = joinPaths(grabbedInputs);
+    }
 
-        BroadcastReceiver receiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context receiverContext, Intent intent) {
-                if (!VOLUME_CHANGED_ACTION.equals(intent.getAction())) {
-                    return;
-                }
-                int stream = intent.getIntExtra(EXTRA_VOLUME_STREAM_TYPE, -1);
-                if (stream != AudioManager.STREAM_MUSIC) {
-                    return;
-                }
-                long now = SystemClock.uptimeMillis();
-                synchronized (lock) {
-                    if (now < suppressVolumeUpdatesUntil) {
-                        return;
-                    }
-                    int value = intent.getIntExtra(EXTRA_VOLUME_STREAM_VALUE, -1);
-                    if (value >= 0) {
-                        stableMediaVolume = value;
-                    } else if (audioManager != null) {
-                        stableMediaVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
-                    }
-                }
+    private static void releaseInputs(List<GrabbedInput> inputs) {
+        byte[] wake = {1};
+        for (int index = inputs.size() - 1; index >= 0; index--) {
+            GrabbedInput input = inputs.get(index);
+
+            // Wake poll() without periodic timers so teardown never leaves a reader thread parked on
+            // a dead/old fd. This is also why the guard can stay battery-idle when no buttons fire.
+            try {
+                Os.write(input.cancelWrite.getFileDescriptor(), wake, 0, wake.length);
+            } catch (ErrnoException ignored) {
+                // Closing the pipe below also makes a waiting poll return.
             }
-        };
 
-        IntentFilter filter = new IntentFilter(VOLUME_CHANGED_ACTION);
+            if (input.grabbed) {
+                try {
+                    EvdevExclusiveGuard.setGrab(input.descriptor.getFd(), false);
+                } catch (RuntimeException | LinkageError ignored) {
+                    // Closing the fd below also releases EVIOCGRAB in the kernel.
+                }
+                input.grabbed = false;
+            }
+            closeQuietly(input.descriptor);
+            closeQuietly(input.cancelRead);
+            closeQuietly(input.cancelWrite);
+        }
+    }
+
+    private static void closeQuietly(ParcelFileDescriptor descriptor) {
+        if (descriptor == null) {
+            return;
+        }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED);
-            } else {
-                context.registerReceiver(receiver, filter);
-            }
-            volumeReceiver = receiver;
-            volumeGuardWarning = "";
-        } catch (RuntimeException exception) {
-            // A Shizuku UserService Context is not a normal app Context on every OEM. The guard can
-            // still work by snapshotting STREAM_MUSIC directly at the key event; this receiver only
-            // improves baseline tracking for legitimate volume changes between headset presses.
-            volumeReceiver = null;
-            volumeGuardWarning = "Volume-change callback unavailable on this Android build";
+            descriptor.close();
+        } catch (IOException ignored) {
+            // Device or cancellation pipe may already be gone.
         }
     }
 
@@ -646,16 +726,58 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         }
         callbackHandler.post(() -> {
             synchronized (lock) {
-                if (!volumeGuardEnabled || volumeGuardActive) {
+                if (!volumeGuardEnabled) {
                     return;
                 }
-                // A USB/input-node change is the strongest signal that a reconnect can succeed.
-                // Restart the bounded backoff immediately, without permanent polling.
+
+                if (!grabbedInputs.isEmpty()) {
+                    // A composite USB remote may expose multiple event nodes. Re-scan after a short
+                    // debounce even while protection is active so a newly-created call-control node
+                    // is acquired without waiting for a failure on an already-grabbed node.
+                    scheduleInputTopologyReconcileLocked();
+                    return;
+                }
+
+                // No node is held right now. A USB/input-node change is the strongest signal that a
+                // reconnect can succeed, so try immediately rather than leaving a deliberate
+                // call-safety window. Any race with a half-created node falls back to the normal
+                // bounded recovery delays; there is still no permanent polling loop.
                 cancelVolumeRecoveryLocked();
                 volumeRecoveryAttempt = 0;
-                scheduleVolumeRecoveryLocked();
+                startVolumeGuardLocked();
             }
         });
+    }
+
+    private void reconcileInputTopology() {
+        synchronized (lock) {
+            inputTopologyReconcileScheduled = false;
+            if (!volumeGuardEnabled) {
+                return;
+            }
+            VolumeInputDeviceParser.Device requested =
+                    VolumeInputDeviceParser.decode(selectedVolumeDevice);
+            if (requested == null) {
+                return;
+            }
+            reconcileVolumeGuardLocked(requested);
+        }
+    }
+
+    private void scheduleInputTopologyReconcileLocked() {
+        if (!volumeGuardEnabled || inputTopologyReconcileScheduled) {
+            return;
+        }
+        inputTopologyReconcileScheduled = true;
+        callbackHandler.postDelayed(
+                inputTopologyReconcileRunnable,
+                INPUT_TOPOLOGY_RECONCILE_DELAY_MS
+        );
+    }
+
+    private void cancelInputTopologyReconcileLocked() {
+        inputTopologyReconcileScheduled = false;
+        callbackHandler.removeCallbacks(inputTopologyReconcileRunnable);
     }
 
     private void stopInputObserverLocked() {
@@ -672,8 +794,14 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             if (!volumeGuardEnabled || volumeGuardActive) {
                 return;
             }
-            clearVolumeMonitorLocked(null);
-            startVolumeGuardLocked();
+            VolumeInputDeviceParser.Device requested =
+                    VolumeInputDeviceParser.decode(selectedVolumeDevice);
+            if (requested == null || grabbedInputs.isEmpty()) {
+                clearExclusiveGuardLocked(null);
+                startVolumeGuardLocked();
+            } else {
+                reconcileVolumeGuardLocked(requested);
+            }
         }
     }
 
@@ -725,49 +853,57 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         callbackHandler.removeCallbacks(mediaRecoveryRunnable);
     }
 
-    private void clearVolumeMonitorLocked(Process expectedProcess) {
-        Process process = volumeMonitorProcess;
-        if (expectedProcess != null && process != expectedProcess) {
+    private void clearExclusiveGuardLocked(GrabbedInput expectedInput) {
+        if (expectedInput != null && !grabbedInputs.contains(expectedInput)) {
             return;
         }
 
-        volumeMonitorProcess = null;
-        if (process != null && process.isAlive()) {
-            process.destroy();
-        }
+        List<GrabbedInput> active = new ArrayList<>(grabbedInputs);
+        grabbedInputs.clear();
+        selectedResolvedPath = "";
 
-        Thread thread = volumeMonitorThread;
-        volumeMonitorThread = null;
-        if (thread != null && thread != Thread.currentThread()) {
-            thread.interrupt();
-        }
-
-        BroadcastReceiver receiver = volumeReceiver;
-        volumeReceiver = null;
-        if (receiver != null && context != null) {
-            try {
-                context.unregisterReceiver(receiver);
-            } catch (RuntimeException ignored) {
-                // Already gone, or this OEM's UserService Context does not support unregistering.
+        // Drop kernel ownership before closing the descriptors. Closing is itself sufficient to
+        // release EVIOCGRAB, but the explicit release makes the normal shutdown path immediate.
+        releaseInputs(active);
+        for (GrabbedInput input : active) {
+            Thread thread = input.readerThread;
+            input.readerThread = null;
+            if (thread != null && thread != Thread.currentThread()) {
+                thread.interrupt();
             }
         }
-
-        callbackHandler.removeCallbacks(volumeRestoreRunnable);
-        callbackHandler.removeCallbacks(volumeRestoreFinishRunnable);
-        volumeRestoreCycleScheduled = false;
-        pendingRestoreVolume = -1;
-        audioManager = null;
-        stableMediaVolume = -1;
-        suppressVolumeUpdatesUntil = 0L;
     }
 
     private void stopVolumeGuardLocked() {
         volumeGuardActive = false;
         selectedResolvedPath = "";
+        volumeGuardWarning = "";
         cancelVolumeRecoveryLocked();
+        cancelInputTopologyReconcileLocked();
         volumeRecoveryAttempt = 0;
-        clearVolumeMonitorLocked(null);
+        clearExclusiveGuardLocked(null);
         stopInputObserverLocked();
+    }
+
+    private static final class GrabbedInput {
+        final VolumeInputDeviceParser.Device device;
+        final ParcelFileDescriptor descriptor;
+        final ParcelFileDescriptor cancelRead;
+        final ParcelFileDescriptor cancelWrite;
+        volatile Thread readerThread;
+        boolean grabbed;
+
+        GrabbedInput(
+                VolumeInputDeviceParser.Device device,
+                ParcelFileDescriptor descriptor,
+                ParcelFileDescriptor cancelRead,
+                ParcelFileDescriptor cancelWrite
+        ) {
+            this.device = device;
+            this.descriptor = descriptor;
+            this.cancelRead = cancelRead;
+            this.cancelWrite = cancelWrite;
+        }
     }
 
     @SuppressLint({"PrivateApi", "DiscouragedPrivateApi"})

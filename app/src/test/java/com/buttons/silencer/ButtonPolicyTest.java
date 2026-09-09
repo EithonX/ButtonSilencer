@@ -10,28 +10,44 @@ import static org.junit.Assert.assertTrue;
 
 public final class ButtonPolicyTest {
     @Test
-    public void classifiesCommonHeadsetKeys() {
+    public void classifiesCallCapableKeysAsSafetyCritical() {
         assertEquals(
-                ButtonPolicy.Category.MEDIA,
+                ButtonPolicy.Category.CALL_SAFETY,
                 ButtonPolicy.categoryFor(KeyEvent.KEYCODE_HEADSETHOOK)
         );
         assertEquals(
-                ButtonPolicy.Category.MEDIA,
+                ButtonPolicy.Category.CALL_SAFETY,
                 ButtonPolicy.categoryFor(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+        );
+        assertEquals(
+                ButtonPolicy.Category.CALL_SAFETY,
+                ButtonPolicy.categoryFor(KeyEvent.KEYCODE_CALL)
+        );
+        assertEquals(
+                ButtonPolicy.Category.CALL_SAFETY,
+                ButtonPolicy.categoryFor(KeyEvent.KEYCODE_ENDCALL)
         );
         assertEquals(
                 ButtonPolicy.Category.VOLUME,
                 ButtonPolicy.categoryFor(KeyEvent.KEYCODE_VOLUME_UP)
         );
         assertEquals(
-                ButtonPolicy.Category.ASSIST_CALL,
+                ButtonPolicy.Category.ASSIST,
                 ButtonPolicy.categoryFor(KeyEvent.KEYCODE_VOICE_ASSIST)
         );
     }
 
     @Test
+    public void callSafetyDoesNotDependOnOptionalAdvancedToggles() {
+        ButtonPolicy.Config config = new ButtonPolicy.Config(true, false, false, false, false);
+        assertTrue(ButtonPolicy.shouldBlock(ButtonPolicy.Category.CALL_SAFETY, true, config));
+        assertTrue(ButtonPolicy.shouldBlock(ButtonPolicy.Category.CALL_SAFETY, false, config));
+    }
+
+    @Test
     public void masterSwitchAlwaysWins() {
         ButtonPolicy.Config config = new ButtonPolicy.Config(false, true, true, true, true);
+        assertFalse(ButtonPolicy.shouldBlock(ButtonPolicy.Category.CALL_SAFETY, true, config));
         assertFalse(ButtonPolicy.shouldBlock(ButtonPolicy.Category.MEDIA, true, config));
         assertFalse(ButtonPolicy.shouldBlock(ButtonPolicy.Category.VOLUME, true, config));
     }

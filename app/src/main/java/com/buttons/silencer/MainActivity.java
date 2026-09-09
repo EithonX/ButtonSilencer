@@ -184,7 +184,6 @@ public final class MainActivity extends Activity {
                 return;
             }
 
-            // The switch records intent; the status area reports actual protection coverage.
             if (!checked) {
                 if (!scanInProgress) {
                     pendingDeviceScan = false;
@@ -367,7 +366,7 @@ public final class MainActivity extends Activity {
             forgetDeviceButton.setAlpha(0.45f);
         } else {
             selectedDeviceName.setText(selectedDevice.name);
-            selectedDevicePath.setText(selectedDevice.path);
+            selectedDevicePath.setText(R.string.headset_selected_detail);
             forgetDeviceButton.setEnabled(true);
             forgetDeviceButton.setAlpha(1.0f);
         }
@@ -380,10 +379,7 @@ public final class MainActivity extends Activity {
                 selectedDevice != null,
                 stateFlags
         );
-        runtimeStatusText.setText(getString(
-                R.string.runtime_status_format,
-                shizukuController.getLocalStatus()
-        ));
+        runtimeStatusText.setText(getShizukuSummary());
 
         updatingUi = true;
         accessibilityMasterSwitch.setChecked(accessibilityFilteringActive);
@@ -404,6 +400,18 @@ public final class MainActivity extends Activity {
                 ? R.string.manage_accessibility
                 : R.string.enable_accessibility_service);
         updateScanButtonState();
+    }
+
+    private String getShizukuSummary() {
+        if (!shizukuController.isBinderAlive()) {
+            return getString(R.string.shizuku_summary_not_running);
+        }
+        if (!shizukuController.hasPermission()) {
+            return getString(R.string.shizuku_summary_permission);
+        }
+        return getString(shizukuController.isRemoteConnected()
+                ? R.string.shizuku_summary_connected
+                : R.string.shizuku_summary_connecting);
     }
 
     private void updateProtectionStatus(
@@ -437,10 +445,8 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        // Full/green status is intentionally strict. The MediaSession listener is useful for normal
-        // screen-off media routing, but it is not the call-safety guarantee: Android can bypass that
-        // listener for global-priority sessions. A selected headset is only shown as fully protected
-        // when its raw evdev nodes are exclusively guarded.
+        // Full protection requires the exclusive headset guard; MediaSession routing alone
+        // is not a call-safety guarantee.
         if (accessibilityActive && callSafeScreenOff) {
             applyStatus(
                     R.string.protection_active,

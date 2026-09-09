@@ -1,13 +1,11 @@
 # Security policy
 
-## Supported version
-
-Security fixes are made against the latest release.
+Security fixes target the latest release.
 
 ## Reporting a vulnerability
 
-Please do not disclose security-sensitive bugs in a public issue.
+Please do not open a public issue for vulnerabilities involving call-control leakage, unintended input capture, Shizuku privilege boundaries, or release signing.
 
-Use GitHub's private vulnerability reporting for this repository. Include the affected version, Android version, relevant Shizuku mode, and clear reproduction steps. Reports involving call-control leakage, unintended input capture, privilege boundaries, or release signing are especially useful with device-specific details.
+Use GitHub private vulnerability reporting for this repository. Include the affected version, Android version, relevant headset or DAC, Shizuku mode, and clear reproduction steps.
 
-If private vulnerability reporting is unavailable, contact the maintainer through the GitHub profile at <https://github.com/EithonX/> before publishing details.
+If private reporting is unavailable, contact the maintainer through <https://github.com/EithonX/> before publishing details.

@@ -1,78 +1,81 @@
-# Button Silencer
+<p align="center">
+  <img src="docs/assets/app-icon.png" width="112" alt="Button Silencer app icon">
+</p>
 
-[![Android CI](https://github.com/EithonX/ButtonSilencer/actions/workflows/build-apk.yml/badge.svg)](https://github.com/EithonX/ButtonSilencer/actions/workflows/build-apk.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h1 align="center">Button Silencer</h1>
 
-Button Silencer blocks faulty headset and IEM remote buttons without disabling the phone's own physical buttons.
+<p align="center">
+  Block faulty headset and IEM remote buttons without disabling your phone's own buttons.
+</p>
 
-Some damaged or noisy inline remotes generate phantom volume, media, or headset-hook presses. Besides interrupting playback, those events can answer or end calls. Button Silencer filters them at two layers so protection can continue when the screen is off.
+<p align="center">
+  <a href="https://github.com/EithonX/ButtonSilencer/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/EithonX/ButtonSilencer?display_name=tag&sort=semver"></a>
+  <a href="https://github.com/EithonX/ButtonSilencer/actions/workflows/build-apk.yml"><img alt="Android CI" src="https://github.com/EithonX/ButtonSilencer/actions/workflows/build-apk.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-5B57E8"></a>
+</p>
 
-## How it works
+<p align="center">
+  <a href="https://github.com/EithonX/ButtonSilencer/releases/latest"><strong>Download the latest APK</strong></a>
+</p>
 
-- **Screen on:** an Accessibility service consumes the configured headset/media keys before applications receive them. Call-capable keys are always blocked while protection is enabled.
-- **Screen off:** a Shizuku UserService handles privileged input routing.
-- **Selected headset:** Button Silencer uses Linux `EVIOCGRAB` on the selected external headset's safe `/dev/input/event*` nodes. While the raw guard is active, those nodes are exclusively owned and their button events do not continue into Android's dialer, media, or volume handling.
+Faulty inline remotes can generate phantom volume, media, assistant, or headset-hook presses. In the worst case, a ghost headset click can answer or end a call. Button Silencer blocks those controls while leaving the phone's physical buttons alone.
 
-The phone's own side-button input devices are excluded from headset selection.
+## Protection model
 
-> [!IMPORTANT]
-> Screen-off protection depends on Shizuku. If Shizuku stops or the selected-headset raw guard is recovering, Button Silencer cannot guarantee that screen-off headset events are blocked. The app reports partial protection rather than treating that state as fully protected.
+| State | Protection |
+| --- | --- |
+| Screen on | Android Accessibility filters headset keys before apps receive them. |
+| Screen off | Shizuku provides the privileged path used for headset input protection. |
+| Selected headset | Its safe remote-control input nodes can be exclusively guarded before Android handles their button events. |
+
+Call-capable headset keys are treated as safety-critical while protection is enabled. The app only reports full protection when the screen-on path and the selected-headset screen-off guard are both ready.
+
+## Getting started
+
+1. Install the APK from [Releases](https://github.com/EithonX/ButtonSilencer/releases/latest).
+2. Enable Button Silencer in Android Accessibility settings.
+3. Start Shizuku and grant Button Silencer permission.
+4. Turn on **Headset button protection**.
+5. Connect the affected headset or USB DAC, tap **Scan headset**, and select it.
+
+After a reboot, Shizuku must be started again before screen-off protection can return.
 
 ## Requirements
 
 - Android 8.0 (API 26) or newer
-- [Shizuku](https://shizuku.rikka.app/) for screen-off protection
-- Accessibility permission for the screen-on filter
+- Shizuku 13 or newer for screen-off protection
+- Accessibility permission for screen-on filtering
 
-## Install
+## Privacy and behavior
 
-Download the signed APK from [GitHub Releases](https://github.com/EithonX/ButtonSilencer/releases/latest).
-
-1. Install Button Silencer.
-2. Enable its Accessibility service.
-3. Start Shizuku and grant Button Silencer access.
-4. Turn on **Headset button protection**.
-5. Connect the affected headset or USB DAC.
-6. Tap **Scan headset** and choose the external device.
-7. Confirm that the app reports full protection before relying on screen-off call protection.
-8. Verify that the phone's own volume buttons still work.
-
-After a reboot, Shizuku must be started again before the privileged screen-off path can return.
-
-## What it does not do
-
-- No network permission, analytics, ads, or account system
-- No foreground service or wake lock
-- No USB interface claiming or control transfers
-- No key-layout or system-file modification
-- No persistent event-history database
-
-Diagnostic logging is off by default. When enabled, recent Accessibility events are kept only in the app process's in-memory ring buffer.
+Button Silencer has no network permission, analytics, ads, or account system. It does not claim USB interfaces, modify Android key-layout files, use a wake lock, or run a permanent polling loop. Diagnostic logging is off by default and stays in memory for the current app session.
 
 ## Building
 
-The project uses JDK 17, Gradle 8.13, Android Gradle Plugin 8.13.2, and Android SDK 36.
+The project uses JDK 17, Android SDK 36, Android Gradle Plugin 8.13.2, and Gradle 8.13.
 
 ```bash
-gradle testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease
+./gradlew testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease
 ```
 
-The four small JNI libraries under `app/src/main/jniLibs/` implement the exclusive evdev grab. Verify them with:
+The native `EVIOCGRAB` bridge is committed for four Android ABIs. Verify it with:
 
 ```bash
 bash scripts/verify-native-libs.sh
 ```
 
-To rebuild those libraries, install the Android NDK, set `ANDROID_NDK_HOME`, and run:
+To rebuild the native libraries, set `ANDROID_NDK_HOME` and run:
 
 ```bash
 bash scripts/build-native.sh
 ```
 
-Pull-request CI builds an ordinary debug APK and an **unsigned** release APK. Official release APKs are built from version tags and signed with the maintainer's private release key.
+See [docs/architecture.md](docs/architecture.md) for the input-routing design and safety boundaries.
 
-## Contributing and security
+## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes. Please report security-sensitive issues according to [SECURITY.md](SECURITY.md), not in a public issue.
+Focused fixes and device-specific compatibility improvements are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Button Silencer is maintained by [EithonX](https://github.com/EithonX/). Licensed under the [MIT License](LICENSE).
+Security-sensitive issues should follow [SECURITY.md](SECURITY.md).
+
+Maintained by [EithonX](https://github.com/EithonX/). Licensed under the [MIT License](LICENSE).

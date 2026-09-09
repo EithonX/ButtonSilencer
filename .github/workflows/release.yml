@@ -33,6 +33,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             test "$GITHUB_REF_NAME" = "v$version"
           fi
+          grep -Fqx "## [$version]" CHANGELOG.md
           echo "APP_VERSION=$version" >> "$GITHUB_ENV"
           echo "app_version=$version" >> "$GITHUB_OUTPUT"
 
@@ -116,6 +117,13 @@ jobs:
             | tee dist/SIGNING_CERTIFICATE.txt
           sha256sum "dist/ButtonSilencer-$APP_VERSION.apk" > dist/SHA256SUMS.txt
 
+          awk -v heading="## [$APP_VERSION]" '
+            $0 == heading { capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' CHANGELOG.md > dist/RELEASE_NOTES.md
+          test -s dist/RELEASE_NOTES.md
+
       - name: Upload signed release package
         uses: actions/upload-artifact@v7
         with:
@@ -154,7 +162,6 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "dist/ButtonSilencer-$APP_VERSION.apk" \
             dist/SHA256SUMS.txt \
-            dist/SIGNING_CERTIFICATE.txt \
             --verify-tag \
-            --title "Button Silencer $APP_VERSION" \
-            --generate-notes
+            --title "$GITHUB_REF_NAME" \
+            --notes-file dist/RELEASE_NOTES.md

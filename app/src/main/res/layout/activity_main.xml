@@ -18,7 +18,6 @@
         android:paddingEnd="@dimen/screen_gutter"
         android:paddingBottom="@dimen/screen_bottom">
 
-        <!-- Quiet identity. The protection state, not branding chrome, owns the screen. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -26,8 +25,8 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
                 android:contentDescription="@null"
                 android:importantForAccessibility="no"
                 android:src="@mipmap/ic_launcher" />
@@ -49,7 +48,6 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
-                    android:ellipsize="end"
                     android:maxLines="1"
                     android:text="@string/tagline_short"
                     android:textColor="@color/text_tertiary"
@@ -57,12 +55,11 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- The real hero: are unwanted headset controls actually neutralized right now? -->
         <LinearLayout
             android:id="@+id/protectionStatusCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="18dp"
             android:background="@drawable/bg_status_inactive"
             android:orientation="vertical"
             android:padding="18dp">
@@ -75,21 +72,21 @@
 
                 <TextView
                     android:id="@+id/statusDot"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
                     android:background="@drawable/bg_status_orb"
                     android:gravity="center"
                     android:importantForAccessibility="no"
                     android:text="@string/status_dot"
                     android:textColor="@color/status_inactive"
-                    android:textSize="21sp" />
+                    android:textSize="17sp" />
 
                 <TextView
                     android:id="@+id/protectionStatusTitle"
                     style="@style/TextHeroTitle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
+                    android:layout_marginStart="11dp"
                     android:layout_weight="1" />
 
                 <Switch
@@ -105,26 +102,9 @@
                 style="@style/TextHeroBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp" />
-
-            <TextView
-                android:id="@+id/runtimeStatusText"
-                style="@style/RuntimeStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp" />
-
-            <Button
-                android:id="@+id/reconnectShizukuButton"
-                style="@style/WidgetPrimaryButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/connect_shizuku"
-                android:visibility="gone" />
+                android:layout_marginTop="10dp" />
         </LinearLayout>
 
-        <!-- Accessibility is the primary screen-on engine, so setup/status stays on the main path. -->
         <TextView
             style="@style/TextEyebrow"
             android:layout_width="wrap_content"
@@ -137,48 +117,55 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_card"
-            android:elevation="1dp"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
 
-            <LinearLayout
-                android:layout_width="match_parent"
+            <TextView
+                style="@style/TextSectionTitle"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    style="@style/TextSectionTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/accessibility_filtering_title" />
-
-                <Switch
-                    android:id="@+id/accessibilityMasterSwitch"
-                    style="@style/WidgetSwitchCompact"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:contentDescription="@string/accessibility_master" />
-            </LinearLayout>
+                android:text="@string/accessibility_filtering_title" />
 
             <TextView
                 android:id="@+id/accessibilityStatus"
-                style="@style/StateMessage"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="5dp" />
 
             <Button
                 android:id="@+id/openAccessibilityButton"
-                style="@style/WidgetSecondaryButton"
+                style="@style/WidgetTextButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="6dp"
                 android:text="@string/enable_accessibility_service" />
+
+            <View style="@style/SectionDividerCompact" />
+
+            <TextView
+                style="@style/TextSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/screen_off_title" />
+
+            <TextView
+                android:id="@+id/runtimeStatusText"
+                style="@style/TextBody"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp" />
+
+            <Button
+                android:id="@+id/reconnectShizukuButton"
+                style="@style/WidgetTextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/connect_shizuku"
+                android:visibility="gone" />
         </LinearLayout>
 
-        <!-- The selected evdev node is only needed for screen-off volume protection. -->
         <TextView
             style="@style/TextEyebrow"
             android:layout_width="wrap_content"
@@ -191,7 +178,6 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:background="@drawable/bg_card"
-            android:elevation="1dp"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
 
@@ -202,8 +188,8 @@
                 android:orientation="horizontal">
 
                 <FrameLayout
-                    android:layout_width="46dp"
-                    android:layout_height="46dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:background="@drawable/bg_icon_well"
                     android:padding="10dp">
 
@@ -230,7 +216,7 @@
 
                     <TextView
                         android:id="@+id/selectedDevicePath"
-                        style="@style/TextDevicePath"
+                        style="@style/TextMeta"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp" />
@@ -241,13 +227,13 @@
                 style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="12dp"
                 android:text="@string/headset_device_explanation_short" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="12dp"
                 android:orientation="horizontal">
 
                 <Button
@@ -261,15 +247,13 @@
                 <Button
                     android:id="@+id/forgetDeviceButton"
                     style="@style/WidgetSecondaryButton"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="10dp"
-                    android:layout_weight="1"
                     android:text="@string/forget_device" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Secondary controls stay visually quiet until explicitly opened. -->
         <TextView
             android:id="@+id/advancedHeader"
             style="@style/WidgetDisclosure"
@@ -286,6 +270,71 @@
             android:orientation="vertical"
             android:padding="@dimen/card_padding"
             android:visibility="gone">
+
+            <TextView
+                style="@style/TextEyebrow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_rules_eyebrow" />
+
+            <TextView
+                style="@style/TextSectionTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/accessibility_rules_title" />
+
+            <Switch
+                android:id="@+id/accessibilityMasterSwitch"
+                style="@style/WidgetSwitchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/accessibility_master" />
+
+            <Switch
+                android:id="@+id/accessibilityMediaSwitch"
+                style="@style/WidgetSwitchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_media" />
+
+            <Switch
+                android:id="@+id/accessibilityExternalVolumeSwitch"
+                style="@style/WidgetSwitchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_external_volume" />
+
+            <Switch
+                android:id="@+id/accessibilityAssistCallSwitch"
+                style="@style/WidgetSwitchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_assist_call" />
+
+            <Switch
+                android:id="@+id/accessibilityAllVolumeSwitch"
+                style="@style/WidgetSwitchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/accessibility_all_volume" />
+
+            <TextView
+                style="@style/TextWarning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/block_all_volume_warning" />
+
+            <TextView
+                style="@style/TextBody"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/accessibility_rules_help" />
+
+            <View style="@style/SectionDivider" />
 
             <TextView
                 style="@style/TextEyebrow"
@@ -321,64 +370,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:text="@string/privileged_routes_help" />
-
-            <View style="@style/SectionDivider" />
-
-            <TextView
-                style="@style/TextEyebrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/accessibility_rules_eyebrow" />
-
-            <TextView
-                style="@style/TextSectionTitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
-                android:text="@string/accessibility_rules_title" />
-
-            <TextView
-                style="@style/TextBody"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:text="@string/accessibility_rules_help" />
-
-            <Switch
-                android:id="@+id/accessibilityMediaSwitch"
-                style="@style/WidgetSwitchRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/accessibility_media" />
-
-            <Switch
-                android:id="@+id/accessibilityExternalVolumeSwitch"
-                style="@style/WidgetSwitchRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/accessibility_external_volume" />
-
-            <Switch
-                android:id="@+id/accessibilityAssistCallSwitch"
-                style="@style/WidgetSwitchRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/accessibility_assist_call" />
-
-            <Switch
-                android:id="@+id/accessibilityAllVolumeSwitch"
-                style="@style/WidgetSwitchRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/accessibility_all_volume" />
-
-            <TextView
-                style="@style/TextWarning"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/block_all_volume_warning" />
 
             <Button
                 android:id="@+id/openAppInfoButton"
@@ -492,6 +483,13 @@
                 android:text="@string/about_description" />
 
             <TextView
+                style="@style/TextMeta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/privacy_note" />
+
+            <TextView
                 style="@style/TextEyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -505,35 +503,13 @@
                 android:layout_marginTop="5dp"
                 android:text="@string/developer_name" />
 
-            <TextView
-                style="@style/TextMeta"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/developer_url" />
-
             <Button
                 android:id="@+id/githubButton"
-                style="@style/WidgetSecondaryButton"
+                style="@style/WidgetTextButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="4dp"
                 android:text="@string/open_developer_github" />
-
-            <View style="@style/SectionDivider" />
-
-            <TextView
-                style="@style/TextBody"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/privacy_note" />
         </LinearLayout>
-
-        <TextView
-            style="@style/TextFooter"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="@string/footer_note" />
     </LinearLayout>
 </ScrollView>

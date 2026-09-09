@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#5B57E8</color>
+    <color name="primary_dark">#4541C7</color>
+    <color name="primary_pressed">#225B57E8</color>
+    <color name="on_primary">#FFFFFF</color>
+
+    <color name="background">#F7F8FB</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#EFF1F6</color>
+    <color name="surface_pressed">#E7EAF1</color>
+    <color name="panel_surface">#F0F2F7</color>
+
+    <color name="text_primary">#151720</color>
+    <color name="text_secondary">#626979</color>
+    <color name="text_tertiary">#697282</color>
+    <color name="divider">#E3E6ED</color>
+    <color name="status_divider">#24626A78</color>
+
+    <color name="status_active">#08785C</color>
+    <color name="status_active_outline">#4008785C</color>
+    <color name="status_active_surface">#E7F7F0</color>
+    <color name="status_active_surface_end">#F4FBF8</color>
+    <color name="status_warning">#A86406</color>
+    <color name="status_warning_outline">#40A86406</color>
+    <color name="status_warning_surface">#FFF3DD</color>
+    <color name="status_warning_surface_end">#FFFAF0</color>
+    <color name="status_inactive">#737B89</color>
+    <color name="status_inactive_surface">#EEF0F4</color>
+    <color name="status_inactive_surface_end">#F7F8FA</color>
+
+    <color name="runtime_chip">#A8FFFFFF</color>
+    <color name="code_panel">#E8EBF1</color>
+    <color name="warning_text">#9B5B02</color>
+    <color name="icon_background">#171B3C</color>
+    <color name="icon_tint">#5652DD</color>
+
+    <color name="switch_track_off">#C5CAD4</color>
+    <color name="switch_track_on">#7D79F0</color>
+    <color name="switch_thumb_off">#FFFFFF</color>
+    <color name="switch_thumb_on">#FFFFFF</color>
+</resources>

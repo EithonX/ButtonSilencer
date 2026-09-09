@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+}
+
+def buildVersionCode = (project.findProperty('versionCode') ?: project.property('appVersionCode')).toInteger()
+def releaseStorePath = System.getenv('BUTTON_SILENCER_KEYSTORE')
+def releaseStorePassword = System.getenv('BUTTON_SILENCER_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('BUTTON_SILENCER_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('BUTTON_SILENCER_KEY_PASSWORD')
+def hasReleaseSigning = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+        .every { it != null && !it.trim().isEmpty() }
+
+android {
+    namespace 'com.buttons.silencer'
+    compileSdk 36
+
+    buildFeatures {
+        aidl true
+        buildConfig true
+    }
+
+    defaultConfig {
+        applicationId 'com.buttons.silencer'
+        minSdk 26
+        targetSdk 36
+        versionCode buildVersionCode
+        versionName project.property('appVersion')
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+        release {
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+    }
+}
+
+dependencies {
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
+    implementation 'androidx.annotation:annotation:1.3.0'
+    testImplementation 'junit:junit:4.13.2'
+}

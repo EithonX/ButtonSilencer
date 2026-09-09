@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ButtonSilencer" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:windowDisablePreview">false</item>
+    </style>
+
+    <style name="TextAppTitle">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">21sp</item>
+    </style>
+
+    <style name="TextHeroTitle">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">25sp</item>
+    </style>
+
+    <style name="TextHeroBody">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
+    <style name="TextEyebrow">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">@color/primary</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.10</item>
+    </style>
+
+    <style name="TextSectionTitle">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+
+    <style name="TextDeviceName">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">17sp</item>
+    </style>
+
+    <style name="TextDevicePath">
+        <item name="android:ellipsize">middle</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="TextBody">
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
+    <style name="TextMeta">
+        <item name="android:textColor">@color/text_tertiary</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="TextFooter">
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
+    <style name="TextWarning" parent="TextBody">
+        <item name="android:textColor">@color/warning_text</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="RuntimeStatus">
+        <item name="android:background">@drawable/bg_runtime_chip</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="WidgetPrimaryButton" parent="android:style/Widget.Material.Button">
+        <item name="android:background">@drawable/bg_button_primary</item>
+        <item name="android:textColor">@color/on_primary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="WidgetSecondaryButton" parent="android:style/Widget.Material.Button">
+        <item name="android:background">@drawable/bg_button_secondary</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:insetLeft">0dp</item>
+        <item name="android:insetRight">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="WidgetSwitchRow" parent="android:style/Widget.Material.CompoundButton.Switch">
+        <item name="android:minHeight">52dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:showText">false</item>
+        <item name="android:thumbTint">@color/switch_thumb_tint</item>
+        <item name="android:trackTint">@color/switch_track_tint</item>
+    </style>
+
+    <style name="WidgetDisclosure">
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="WidgetSwitchCompact" parent="android:style/Widget.Material.CompoundButton.Switch">
+        <item name="android:minWidth">52dp</item>
+        <item name="android:showText">false</item>
+        <item name="android:thumbTint">@color/switch_thumb_tint</item>
+        <item name="android:trackTint">@color/switch_track_tint</item>
+    </style>
+
+    <style name="StateMessage">
+        <item name="android:background">@drawable/bg_runtime_chip</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingExtra">1dp</item>
+    </style>
+
+    <style name="WidgetTextButton" parent="android:style/Widget.Material.Button.Borderless">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+    </style>
+
+    <style name="SectionDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginTop">20dp</item>
+        <item name="android:layout_marginBottom">20dp</item>
+        <item name="android:background">@color/divider</item>
+    </style>
+</resources>

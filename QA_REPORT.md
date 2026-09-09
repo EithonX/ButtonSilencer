@@ -1,8 +1,8 @@
-# Button Silencer 3.1.1 — QA and device verification
+# Button Silencer 3.1.2 — QA and device verification
 
 ## What was audited
 
-The 3.1.1 pass focused on the two failure modes most likely to explain intermittent screen-off protection loss and the earlier heat concern:
+The 3.1.2 pass focused on the two failure modes most likely to explain intermittent screen-off protection loss and the earlier heat concern:
 
 1. the app-side Shizuku/UserService connection lifecycle;
 2. the selected headset `/dev/input/event*` monitor lifecycle.
@@ -66,3 +66,23 @@ Run these against the release APK before calling the build final:
 ## Build limitation of this workspace
 
 This environment has Java but no Gradle executable, Android SDK, `android.jar`, `aapt2`, or `apksigner`, and binary toolchain downloads are unavailable here. The hardened GitHub Actions workflow therefore remains the authoritative end-to-end Android build: it compiles both Java/resource variants, runs unit tests and debug/release lint, assembles the minified release plus debug APK, verifies 16 KiB-aware alignment and APK signatures, writes SHA-256 hashes, and uploads Gradle/Android reports automatically on failure.
+
+## 3.1.2 CI regression audit
+
+The 3.1.1 Actions run failed before compilation because the app added `androidx.annotation:annotation:1.9.1` while Shizuku 13.1.5's dependency graph resolves `androidx.annotation` at 1.3.0. 3.1.2 aligns exactly with Shizuku's official demo/provider dependency (`1.3.0`) and the project preflight rejects any other direct annotation version.
+
+Additional checks completed for this package:
+
+- every production Java source compiled together under a Java 17 Android/Shizuku API stub harness;
+- every unit-test source compiled against those production classes;
+- all 10 existing policy/parser unit tests passed in the same harness;
+- every resource XML parsed and every app resource reference was resolved by the project preflight;
+- manifest application components map to real source classes;
+- release R8 keep targets map to the real UserService/AIDL classes;
+- format-string syntax was checked;
+- the bundled signing keystore was opened and the expected alias was verified;
+- workflow YAML parsed and every shell `run:` block passed `bash -n`;
+- CI uses Gradle `--continue` and preserves `.ci/gradle.log` plus build reports so independent failures are visible in one run;
+- design-intelligence static review reports 0 generic-interface signals for the main layout.
+
+This environment still does not contain Google's Android SDK/AGP binaries, so AAPT2, Android Lint, R8, APK assembly, zip alignment, and APK signature verification remain the real GitHub Actions stage. The workflow is deliberately structured to exercise all of those in one run and retain diagnostics if any stage fails.

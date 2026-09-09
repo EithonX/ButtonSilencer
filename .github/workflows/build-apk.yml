@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "VERSION_CODE=$((311000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$((312000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -80,19 +80,19 @@ jobs:
 
       - name: Compile, test, lint, and build APKs
         shell: bash
-        run: >-
-          gradle --no-daemon --stacktrace
-          -PversionCode="$VERSION_CODE"
-          clean
-          :app:compileDebugJavaWithJavac
-          :app:compileReleaseJavaWithJavac
-          :app:processDebugResources
-          :app:processReleaseResources
-          testDebugUnitTest
-          lintDebug
-          lintRelease
-          assembleDebug
-          assembleRelease
+        run: |
+          set -uo pipefail
+          mkdir -p .ci
+          gradle --no-daemon --stacktrace --continue --console=plain \
+            -PversionCode="$VERSION_CODE" \
+            clean \
+            testDebugUnitTest \
+            lintDebug \
+            lintRelease \
+            assembleDebug \
+            assembleRelease \
+            2>&1 | tee .ci/gradle.log
+          exit "${PIPESTATUS[0]}"
 
       - name: Verify and package APKs
         shell: bash
@@ -129,7 +129,9 @@ jobs:
         with:
           name: ButtonSilencer-build-reports
           path: |
+            .ci/gradle.log
             app/build/reports/
+            app/build/outputs/logs/
             build/reports/
           if-no-files-found: ignore
           retention-days: 14

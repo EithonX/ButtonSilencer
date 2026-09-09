@@ -1,4 +1,4 @@
-# Button Silencer 3.1.1
+# Button Silencer 3.1.2
 
 A compact Android utility that blocks unwanted headset controls without claiming the USB audio interface or disabling the phone's own buttons.
 
@@ -13,9 +13,15 @@ A compact Android utility that blocks unwanted headset controls without claiming
 - Keeps the previous Accessibility key filter as an optional advanced fallback.
 - Uses no network permission, analytics, ads, account, foreground notification, wake lock, USB-interface claim, or persistent event log.
 
-## 3.1.1 reliability changes
+## 3.1.2 build hardening
 
-The Shizuku lifecycle is now self-healing instead of relying on the activity being reopened. This point release also fixes the Java definite-assignment bug exposed by GitHub Actions: the reconnect callback is now created only after the application context is assigned. A compile-only AndroidX annotation dependency removes Shizuku metadata warnings without adding runtime APK weight.
+The GitHub Actions dependency-resolution failure in 3.1.1 was caused by pinning `androidx.annotation` to 1.9.1 while Shizuku 13.1.5 resolves that library at 1.3.0. This release follows Shizuku's own demo/provider setup and pins the app to `androidx.annotation:annotation:1.3.0` as an implementation dependency. The preflight rejects a different annotation version so this exact conflict cannot be reintroduced silently.
+
+CI now runs only stable high-level Android tasks (`testDebugUnitTest`, both lint variants, and both APK assemblies), uses Gradle `--continue` to surface independent failures in one run, and stores the complete Gradle console log plus Android build reports on failure. The Android toolchain remains AGP 8.13.2 + Gradle 8.13 + JDK 17 + Build Tools 35.0.0 + compile/target SDK 36, matching the official AGP 8.13 compatibility matrix.
+
+## 3.1.2 reliability changes
+
+The Shizuku lifecycle is now self-healing instead of relying on the activity being reopened. This point release also fixes the Java definite-assignment bug exposed by GitHub Actions: the reconnect callback is now created only after the application context is assigned. The AndroidX annotation dependency is pinned to Shizuku’s own 1.3.0 version so the compile and runtime dependency graphs stay compatible.
 
 - The app uses Shizuku's sticky binder listener and rebinds the daemon UserService when the Shizuku binder returns.
 - The app also links directly to the privileged UserService binder so a dead/restarted privileged process is detected even when Shizuku itself is still alive.
@@ -25,7 +31,7 @@ The Shizuku lifecycle is now self-healing instead of relying on the activity bei
 
 Shizuku daemon UserServices are killed when the Shizuku service itself stops or restarts. Button Silencer therefore cannot protect headset buttons while Shizuku is actually offline, but it will reattach after Shizuku returns and permission is still granted.
 
-## 3.1.1 interface redesign
+## 3.1.2 interface redesign
 
 The main screen was recomposed around the actual job rather than a stack of equally weighted settings cards. One dominant protection surface answers whether blocking is working now, the selected headset is the only other primary task, and Advanced/About stay visually quiet until opened. Recovery text changes with the real failure state (reconnect Shizuku, request permission, or retry protection) instead of showing one generic action.
 

@@ -30,7 +30,7 @@ checks = {
     'compileSdk 36': re.search(r'^\s*compileSdk\s+36(?:\s|$)', build, re.M),
     'Shizuku API': "implementation 'dev.rikka.shizuku:api:13.1.5'" in build,
     'Shizuku provider': "implementation 'dev.rikka.shizuku:provider:13.1.5'" in build,
-    'AndroidX annotations on compile classpath': "compileOnly 'androidx.annotation:annotation:1.9.1'" in build,
+    'Shizuku-compatible AndroidX annotations': "implementation 'androidx.annotation:annotation:1.3.0'" in build,
     'no desugaring dependency': 'coreLibraryDesugaring' not in build,
     'release shrinking': 'minifyEnabled true' in build and 'shrinkResources true' in build,
     'workflow invokes preflight via bash': 'run: bash scripts/check-project-config.sh' in workflow,
@@ -38,15 +38,32 @@ checks = {
     'current checkout action': 'actions/checkout@v6' in workflow,
     'current Gradle action': 'gradle/actions/setup-gradle@v6' in workflow,
     'Android SDK action': 'android-actions/setup-android@v4' in workflow,
-    'compile both variants in CI': ':app:compileDebugJavaWithJavac' in workflow and ':app:compileReleaseJavaWithJavac' in workflow,
-    'release lint and build in CI': 'lintRelease' in workflow and 'assembleRelease' in workflow,
+    'high-level Android CI tasks': all(task in workflow for task in ('testDebugUnitTest', 'lintDebug', 'lintRelease', 'assembleDebug', 'assembleRelease')),
+    'CI continues independent tasks after failure': '--continue' in workflow,
+    'CI captures full Gradle log': 'tee .ci/gradle.log' in workflow and '.ci/gradle.log' in workflow,
     'APK alignment verification': 'zipalign' in workflow and '-P 16 -v 4' in workflow,
     'APK signature verification': 'apksigner' in workflow,
-    '3.1.1 CI version base': '311000 + GITHUB_RUN_NUMBER' in workflow,
+    '3.1.2 CI version base': '312000 + GITHUB_RUN_NUMBER' in workflow,
 }
 for label, ok in checks.items():
     if not ok:
         raise SystemExit(f'Configuration check failed: {label}')
+
+# Shizuku 13.1.5 itself uses androidx.annotation 1.3.0. Keep the app aligned exactly;
+# a newer direct annotation version conflicts with Gradle's consistent runtime resolution.
+annotation_versions = re.findall(
+    r"androidx\.annotation:annotation:([^'\"]+)", build
+)
+if annotation_versions != ['1.3.0']:
+    raise SystemExit(
+        'Dependency check failed: expected exactly androidx.annotation:annotation:1.3.0; '
+        f'found {annotation_versions!r}'
+    )
+
+# Avoid version ranges/dynamic versions in CI-critical Android dependencies.
+for coordinate in re.findall(r"(?:implementation|compileOnly|runtimeOnly|testImplementation)\s+['\"]([^'\"]+)['\"]", build):
+    if '+' in coordinate or '[' in coordinate or ']' in coordinate or '(' in coordinate or ')' in coordinate:
+        raise SystemExit(f'Dynamic/ranged dependency is not allowed: {coordinate}')
 
 # Parse every XML file now, before Android SDK setup.
 xml_files = sorted(root.rglob('*.xml'))

@@ -40,6 +40,7 @@ final class ShizukuController {
     private volatile IBinder remoteBinder;
     private volatile boolean binding;
     private volatile boolean reconnectScheduled;
+    private volatile boolean setupConnectionRequested;
     private volatile int reconnectAttempt;
     private volatile String localStatus = "Shizuku binder not connected";
 
@@ -84,7 +85,14 @@ final class ShizukuController {
 
             remoteBinder = service;
             remote = IPrivilegedBlocker.Stub.asInterface(service);
-            setLocalStatus("Privileged service connected");
+            if (!Preferences.privilegedProtectionRequested(context) && !setupConnectionRequested) {
+                stopPrivilegedService();
+                return;
+            }
+            setLocalStatus(setupConnectionRequested
+                    && !Preferences.privilegedProtectionRequested(context)
+                    ? "Privileged setup connection ready"
+                    : "Privileged service connected");
             applyDesiredState();
         }
 
@@ -111,8 +119,8 @@ final class ShizukuController {
         this.context = context.getApplicationContext();
         reconnectRunnable = () -> {
             reconnectScheduled = false;
-            if (!Preferences.privilegedProtectionRequested(this.context)
-                    || remote != null || binding) {
+            if ((!Preferences.privilegedProtectionRequested(this.context)
+                    && !setupConnectionRequested) || remote != null || binding) {
                 return;
             }
             if (!isBinderAlive()) {
@@ -187,6 +195,23 @@ final class ShizukuController {
             }
         } catch (RuntimeException exception) {
             setLocalStatus("Shizuku request failed: " + concise(exception));
+        }
+    }
+
+    /**
+     * Opens a temporary privileged connection for setup tasks such as enumerating /dev/input.
+     * This is intentionally separate from protection preferences so setup can work while the
+     * protection switch is off. Call {@link #releaseSetupConnection()} when the one-shot task ends.
+     */
+    void requestSetupConnection() {
+        setupConnectionRequested = true;
+        requestPermissionOrConnect();
+    }
+
+    void releaseSetupConnection() {
+        setupConnectionRequested = false;
+        if (!Preferences.privilegedProtectionRequested(context)) {
+            stopPrivilegedService();
         }
     }
 
@@ -357,7 +382,7 @@ final class ShizukuController {
         cancelReconnect();
         reconnectAttempt = 0;
         setLocalStatus("Shizuku connected");
-        if (Preferences.privilegedProtectionRequested(context)) {
+        if (Preferences.privilegedProtectionRequested(context) || setupConnectionRequested) {
             requestPermissionOrConnect();
         }
     }
@@ -402,7 +427,7 @@ final class ShizukuController {
     }
 
     private synchronized void bindPrivilegedService() {
-        if (!Preferences.privilegedProtectionRequested(context)) {
+        if (!Preferences.privilegedProtectionRequested(context) && !setupConnectionRequested) {
             return;
         }
         if (remote != null) {
@@ -436,6 +461,12 @@ final class ShizukuController {
         }
         try {
             current.setDiagnosticLogging(Preferences.diagnosticLoggingEnabled(context));
+            if (setupConnectionRequested && !Preferences.privilegedProtectionRequested(context)) {
+                current.setEnabled(false);
+                current.setHeadsetVolumeGuard("", false);
+                setLocalStatus("Privileged setup connection ready");
+                return;
+            }
             boolean mediaActive = current.setEnabled(
                     Preferences.privilegedMediaEnabled(context)
             );
@@ -462,6 +493,7 @@ final class ShizukuController {
     }
 
     private void stopPrivilegedService() {
+        setupConnectionRequested = false;
         cancelBindTimeout();
         cancelReconnect();
         reconnectAttempt = 0;
@@ -508,7 +540,8 @@ final class ShizukuController {
 
     private synchronized void scheduleReconnect() {
         if (reconnectScheduled || binding || remote != null
-                || !Preferences.privilegedProtectionRequested(context)) {
+                || (!Preferences.privilegedProtectionRequested(context)
+                && !setupConnectionRequested)) {
             return;
         }
         if (!isBinderAlive() || !hasPermission()) {

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Button Silencer</string>
-    <string name="service_name">Button Silencer accessibility fallback</string>
-    <string name="accessibility_service_description">Optional fallback that filters selected key events while Android delivers them to Accessibility. It does not inspect screen contents or typed text.</string>
+    <string name="service_name">Button Silencer screen-on filtering</string>
+    <string name="accessibility_service_description">Primary screen-on filtering for selected headset key events delivered by Android Accessibility. It does not inspect screen contents or typed text.</string>
     <string name="app_icon_description">Button Silencer app icon</string>
     <string name="status_dot">●</string>
     <string name="tagline">Silence headset controls. Keep the phone buttons yours.</string>
@@ -12,39 +12,46 @@
 
     <string name="protection_switch">Headset button protection</string>
     <string name="protection_active">Protection active</string>
-    <string name="protection_active_full_detail">Media and the selected headset’s volume buttons are guarded with the screen on or off.</string>
-    <string name="protection_active_media_only_detail">Media buttons are guarded. Select the headset input device to guard its volume buttons too.</string>
-    <string name="protection_partial">Protection is recovering</string>
-    <string name="protection_partial_detail">A requested route is not active yet. Automatic recovery is armed; reconnect Shizuku or rescan only if it stays here.</string>
+    <string name="protection_active_full_detail">Accessibility filters headset buttons screen-on. Shizuku guards media and the selected headset’s volume buttons screen-off.</string>
+    <string name="protection_active_media_only_detail">Accessibility filters headset buttons screen-on. Shizuku guards media keys screen-off; select the headset input to add screen-off volume protection.</string>
+    <string name="protection_screen_on_only">Screen-on protection active</string>
+    <string name="protection_screen_on_only_detail">Accessibility is filtering headset buttons now. Screen-off protection is unavailable or still reconnecting through Shizuku.</string>
+    <string name="protection_screen_on_only_disabled_detail">Accessibility is filtering headset buttons now. Screen-off Shizuku protection is off.</string>
+    <string name="protection_screen_off_only">Screen-off protection active</string>
+    <string name="protection_screen_off_only_detail">Shizuku is guarding screen-off media and the selected headset’s volume buttons. Enable Accessibility for the primary screen-on path.</string>
+    <string name="protection_screen_off_media_only_detail">Shizuku is guarding media keys screen-off. Enable Accessibility for screen-on filtering and select the headset input for screen-off volume protection.</string>
+    <string name="protection_partial">Screen-off protection is recovering</string>
+    <string name="protection_partial_detail">Shizuku is connected, but one requested screen-off route is not active yet. Automatic recovery is armed.</string>
     <string name="protection_setup">Finishing protection setup</string>
     <string name="protection_setup_detail">Connecting the privileged guard and finding the headset input. Nothing is shown as protected until both are ready.</string>
     <string name="protection_off">Protection off</string>
-    <string name="protection_off_detail">No privileged headset buttons are being blocked.</string>
+    <string name="protection_off_detail">Accessibility filtering and Shizuku screen-off protection are off.</string>
     <string name="shizuku_not_running">Shizuku is not running</string>
-    <string name="shizuku_not_running_detail">Start Shizuku. Button Silencer will reconnect when its binder returns.</string>
+    <string name="shizuku_not_running_detail">Screen-off protection needs Shizuku. Screen-on Accessibility filtering can still work independently.</string>
     <string name="shizuku_not_running_setup_detail">Start Shizuku to continue protection setup. Your protection switch will stay off until setup is complete.</string>
     <string name="permission_required">Shizuku permission required</string>
-    <string name="permission_required_detail">Grant Button Silencer permission from the Shizuku prompt or app.</string>
+    <string name="permission_required_detail">Grant Button Silencer access to restore screen-off protection. Accessibility can keep filtering screen-on.</string>
     <string name="permission_required_setup_detail">Grant Shizuku access to continue. Protection will turn on only after the headset route is ready.</string>
     <string name="connecting">Connecting privileged guard</string>
-    <string name="connecting_detail">The screen-off protection service is being attached.</string>
+    <string name="connecting_detail">The screen-off Shizuku engine is attaching. The main protection switch stays usable while it connects.</string>
     <string name="connect_shizuku">Reconnect Shizuku</string>
     <string name="request_shizuku_access">Request Shizuku access</string>
     <string name="retry_protection">Retry protection</string>
 
-    <string name="headset_device_eyebrow">Selected input</string>
+    <string name="headset_device_eyebrow">Screen-off volume input</string>
     <string name="headset_device_title">Headset volume device</string>
     <string name="no_headset_selected">No headset selected</string>
-    <string name="scan_device_hint">Connect the USB DAC / IEM, then scan for its volume-key input node.</string>
+    <string name="scan_device_hint">Optional for screen-off volume buttons. Connect the USB DAC / IEM, then scan its input node.</string>
     <string name="headset_device_explanation">Only the chosen external input node is monitored. The phone’s built-in side buttons remain outside this route.</string>
-    <string name="headset_device_explanation_short">Only this external input is monitored. Phone volume keys stay untouched.</string>
+    <string name="headset_device_explanation_short">Used only for screen-off volume protection. Accessibility handles external volume keys screen-on without this selection.</string>
     <string name="scan_devices">Scan headset</string>
+    <string name="connect_and_scan">Connect &amp; scan</string>
+    <string name="connecting_to_scan">Connecting…</string>
     <string name="scanning">Scanning…</string>
     <string name="forget_device">Forget</string>
     <string name="choose_headset_device">Choose the headset / IEM</string>
     <string name="select_device_to_block_volume">Media blocking is enabled. Scan and select the headset to block its volume buttons too.</string>
     <string name="select_device_first">Select the headset input device first.</string>
-    <string name="connecting_before_scan">Connecting to Shizuku before scanning…</string>
     <string name="no_volume_devices">No external volume-key input was found. Connect the headset, keep Shizuku running, and scan again.</string>
     <string name="only_phone_buttons_found">Only devices that look like the phone’s own buttons were found, so none were offered.</string>
     <string name="device_selected">Headset device selected</string>
@@ -58,8 +65,11 @@
     <string name="volume_guard_switch">Neutralize volume buttons from selected headset</string>
     <string name="privileged_routes_help">The media listener consumes media keys before normal media sessions. The volume route watches only the selected input node and restores media volume after its volume presses. Recovery is event-driven with bounded retries; there is no wake lock or permanent polling loop.</string>
 
-    <string name="accessibility_eyebrow">Screen-on fallback</string>
-    <string name="accessibility_fallback_title">Accessibility filtering</string>
+    <string name="accessibility_eyebrow">Screen on</string>
+    <string name="accessibility_filtering_title">Accessibility filtering</string>
+    <string name="accessibility_rules_eyebrow">Screen-on rules</string>
+    <string name="accessibility_rules_title">Filtering rules</string>
+    <string name="accessibility_rules_help">These rules apply only while Android’s Accessibility service is enabled and Button Silencer filtering is active.</string>
     <string name="accessibility_status_format">Accessibility: %1$s · %2$s</string>
     <string name="accessibility_master">Enable Accessibility filtering</string>
     <string name="accessibility_media">Block media keys</string>
@@ -70,9 +80,9 @@
     <string name="open_accessibility">Accessibility settings</string>
     <string name="enable_accessibility_service">Set up Accessibility service</string>
     <string name="manage_accessibility">Manage Accessibility service</string>
-    <string name="accessibility_state_setup_required">Android’s Accessibility service is off. Set it up first; filtering controls stay locked until Android can actually run them.</string>
-    <string name="accessibility_state_active">Accessibility service is on and Button Silencer filtering is active.</string>
-    <string name="accessibility_state_paused">Accessibility service is on. Filtering is paused in Button Silencer.</string>
+    <string name="accessibility_state_setup_required">Accessibility filtering is off in Android. Enable the service for the primary screen-on blocking path.</string>
+    <string name="accessibility_state_active">Active now. Accessibility is the primary screen-on button filter.</string>
+    <string name="accessibility_state_paused">Android service is available, but Button Silencer filtering is paused.</string>
     <string name="accessibility_ready">Accessibility filtering is ready</string>
     <string name="accessibility_settings_unavailable">Accessibility settings are unavailable on this device.</string>
     <string name="protection_setup_complete">Headset selected. Protection is turning on.</string>
@@ -101,6 +111,6 @@
     <string name="developer_url">https://github.com/EithonX/</string>
     <string name="open_developer_github">Open EithonX on GitHub</string>
     <string name="privacy_note">No network permission, analytics, ads, account, USB interface claim, continuous polling loop, or persistent event history.</string>
-    <string name="footer_note">Shizuku must be running after a reboot. Release builds are minified and resource-shrunk.</string>
+    <string name="footer_note">Accessibility handles screen-on filtering. Shizuku must be running after a reboot for screen-off protection.</string>
     <string name="no_browser">No browser app is available.</string>
 </resources>

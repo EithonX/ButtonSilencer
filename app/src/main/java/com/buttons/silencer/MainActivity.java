@@ -62,8 +62,8 @@ public final class MainActivity extends Activity {
     private boolean advancedExpanded;
     private boolean aboutExpanded;
     private boolean pendingDeviceScan;
+    private boolean scanInProgress;
     private boolean pendingAccessibilitySetup;
-    private boolean pendingProtectionEnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,10 +96,12 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         boolean serviceEnabled = isAccessibilityServiceEnabled();
-        if (pendingAccessibilitySetup && serviceEnabled) {
+        if (pendingAccessibilitySetup) {
             pendingAccessibilitySetup = false;
-            Preferences.putBoolean(this, Preferences.KEY_MASTER, true);
-            Toast.makeText(this, R.string.accessibility_ready, Toast.LENGTH_SHORT).show();
+            if (serviceEnabled) {
+                Preferences.putBoolean(this, Preferences.KEY_MASTER, true);
+                Toast.makeText(this, R.string.accessibility_ready, Toast.LENGTH_SHORT).show();
+            }
         }
         refreshUi();
     }
@@ -112,6 +114,11 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (pendingDeviceScan || scanInProgress) {
+            pendingDeviceScan = false;
+            scanInProgress = false;
+            shizukuController.releaseSetupConnection();
+        }
         ioExecutor.shutdownNow();
         super.onDestroy();
     }
@@ -175,25 +182,23 @@ public final class MainActivity extends Activity {
             if (updatingUi) {
                 return;
             }
+
+            // This switch is intent, while the hero reports actual coverage. Enabling protection
+            // must never be blocked by one unavailable engine: Accessibility can protect screen-on
+            // independently, and Shizuku can recover the screen-off route asynchronously.
             if (!checked) {
-                pendingProtectionEnable = false;
-                pendingDeviceScan = false;
+                if (!scanInProgress) {
+                    pendingDeviceScan = false;
+                }
+                Preferences.putBoolean(this, Preferences.KEY_MASTER, false);
                 shizukuController.setProtectionEnabled(false);
                 refreshUi();
                 return;
             }
 
-            // The primary switch represents real, complete protection. Do not leave it visually
-            // on while prerequisites are missing; walk the user through them instead.
-            if (Preferences.headsetVolumeDevice(this).isEmpty()) {
-                pendingProtectionEnable = true;
-                updatingUi = true;
-                button.setChecked(false);
-                updatingUi = false;
-                scanVolumeInputDevices();
-                return;
+            if (isAccessibilityServiceEnabled()) {
+                Preferences.putBoolean(this, Preferences.KEY_MASTER, true);
             }
-
             shizukuController.setProtectionEnabled(true);
             refreshUi();
         });
@@ -315,12 +320,6 @@ public final class MainActivity extends Activity {
             pendingDeviceScan = false;
             scanVolumeInputDevices();
         }
-        if (pendingProtectionEnable
-                && !Preferences.headsetVolumeDevice(this).isEmpty()
-                && shizukuController.isRemoteConnected()) {
-            pendingProtectionEnable = false;
-            shizukuController.setProtectionEnabled(true);
-        }
         if (advancedExpanded) {
             requestDiagnosticsRefresh();
         }
@@ -333,19 +332,22 @@ public final class MainActivity extends Activity {
 
         boolean mediaDesired = Preferences.privilegedMediaEnabled(this);
         boolean volumeDesired = Preferences.headsetVolumeGuardEnabled(this);
-        boolean protectionDesired = mediaDesired || volumeDesired;
+        boolean privilegedDesired = mediaDesired || volumeDesired;
+        boolean accessibilityEnabled = isAccessibilityServiceEnabled();
+        boolean accessibilityFilteringActive = accessibilityEnabled
+                && Preferences.isMasterEnabled(this);
+        boolean protectionDesired = privilegedDesired || accessibilityFilteringActive;
         String selected = Preferences.headsetVolumeDevice(this);
         VolumeInputDeviceParser.Device selectedDevice = VolumeInputDeviceParser.decode(selected);
         int stateFlags = shizukuController.getStateFlags();
 
         updatingUi = true;
         protectionSwitch.setChecked(protectionDesired);
-        protectionSwitch.setEnabled(!pendingProtectionEnable);
+        protectionSwitch.setEnabled(true);
         mediaListenerSwitch.setChecked(mediaDesired);
         headsetVolumeGuardSwitch.setChecked(volumeDesired);
         headsetVolumeGuardSwitch.setEnabled(!selected.isEmpty());
         diagnosticLoggingSwitch.setChecked(Preferences.diagnosticLoggingEnabled(this));
-        accessibilityMasterSwitch.setChecked(Preferences.isMasterEnabled(this));
         accessibilityMediaSwitch.setChecked(Preferences.blockMedia(this));
         accessibilityExternalVolumeSwitch.setChecked(Preferences.blockExternalVolume(this));
         accessibilityAssistCallSwitch.setChecked(Preferences.blockAssistCall(this));
@@ -368,16 +370,14 @@ public final class MainActivity extends Activity {
                 protectionDesired,
                 mediaDesired,
                 volumeDesired,
+                accessibilityFilteringActive,
+                selectedDevice != null,
                 stateFlags
         );
         runtimeStatusText.setText(getString(
                 R.string.runtime_status_format,
                 shizukuController.getLocalStatus()
         ));
-
-        boolean accessibilityEnabled = isAccessibilityServiceEnabled();
-        boolean accessibilityFilteringActive = accessibilityEnabled
-                && Preferences.isMasterEnabled(this);
 
         updatingUi = true;
         accessibilityMasterSwitch.setChecked(accessibilityFilteringActive);
@@ -397,44 +397,29 @@ public final class MainActivity extends Activity {
         openAccessibilityButton.setText(accessibilityEnabled
                 ? R.string.manage_accessibility
                 : R.string.enable_accessibility_service);
+        updateScanButtonState();
     }
 
     private void updateProtectionStatus(
             boolean protectionDesired,
             boolean mediaDesired,
             boolean volumeDesired,
+            boolean accessibilityActive,
+            boolean hasSelectedDevice,
             int stateFlags
     ) {
-        if (pendingProtectionEnable) {
-            if (!shizukuController.isBinderAlive()) {
-                applyStatus(
-                        R.string.shizuku_not_running,
-                        R.string.shizuku_not_running_setup_detail,
-                        R.drawable.bg_status_warning,
-                        R.color.status_warning
-                );
-                reconnectShizukuButton.setText(R.string.connect_shizuku);
-                reconnectShizukuButton.setVisibility(View.VISIBLE);
-            } else if (!shizukuController.hasPermission()) {
-                applyStatus(
-                        R.string.permission_required,
-                        R.string.permission_required_setup_detail,
-                        R.drawable.bg_status_warning,
-                        R.color.status_warning
-                );
-                reconnectShizukuButton.setText(R.string.request_shizuku_access);
-                reconnectShizukuButton.setVisibility(View.VISIBLE);
-            } else {
-                applyStatus(
-                        R.string.protection_setup,
-                        R.string.protection_setup_detail,
-                        R.drawable.bg_status_warning,
-                        R.color.status_warning
-                );
-                reconnectShizukuButton.setVisibility(View.GONE);
-            }
-            return;
-        }
+        boolean remoteConnected = shizukuController.isRemoteConnected();
+        boolean mediaReady = remoteConnected
+                && mediaDesired
+                && (stateFlags & PrivilegedState.MEDIA_ENABLED) != 0;
+        boolean volumeReady = remoteConnected
+                && volumeDesired
+                && (stateFlags & PrivilegedState.VOLUME_GUARD_ACTIVE) != 0;
+        boolean hasError = remoteConnected
+                && (stateFlags & PrivilegedState.HAS_ERROR) != 0;
+        boolean privilegedReady = mediaReady
+                && (!volumeDesired || volumeReady)
+                && !hasError;
 
         if (!protectionDesired) {
             applyStatus(
@@ -442,6 +427,47 @@ public final class MainActivity extends Activity {
                     R.string.protection_off_detail,
                     R.drawable.bg_status_inactive,
                     R.color.status_inactive
+            );
+            reconnectShizukuButton.setVisibility(View.GONE);
+            return;
+        }
+
+        // Accessibility is the preferred screen-on path. A Shizuku outage must never make the
+        // whole app look or behave disabled while Accessibility is still actively filtering keys.
+        if (accessibilityActive && privilegedReady) {
+            applyStatus(
+                    R.string.protection_active,
+                    hasSelectedDevice && volumeDesired
+                            ? R.string.protection_active_full_detail
+                            : R.string.protection_active_media_only_detail,
+                    R.drawable.bg_status_active,
+                    R.color.status_active
+            );
+            reconnectShizukuButton.setVisibility(View.GONE);
+            return;
+        }
+
+        if (accessibilityActive) {
+            applyStatus(
+                    R.string.protection_screen_on_only,
+                    mediaDesired || volumeDesired
+                            ? R.string.protection_screen_on_only_detail
+                            : R.string.protection_screen_on_only_disabled_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
+            );
+            configureShizukuRecoveryAction(mediaDesired || volumeDesired);
+            return;
+        }
+
+        if (privilegedReady) {
+            applyStatus(
+                    R.string.protection_screen_off_only,
+                    hasSelectedDevice && volumeDesired
+                            ? R.string.protection_screen_off_only_detail
+                            : R.string.protection_screen_off_media_only_detail,
+                    R.drawable.bg_status_warning,
+                    R.color.status_warning
             );
             reconnectShizukuButton.setVisibility(View.GONE);
             return;
@@ -471,41 +497,43 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        if (!shizukuController.isRemoteConnected()) {
+        if (!remoteConnected) {
             applyStatus(
                     R.string.connecting,
                     R.string.connecting_detail,
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
-            reconnectShizukuButton.setText(R.string.connect_shizuku);
+            reconnectShizukuButton.setText(R.string.retry_protection);
             reconnectShizukuButton.setVisibility(View.VISIBLE);
             return;
         }
 
-        boolean mediaReady = !mediaDesired
-                || (stateFlags & PrivilegedState.MEDIA_ENABLED) != 0;
-        boolean volumeReady = !volumeDesired
-                || (stateFlags & PrivilegedState.VOLUME_GUARD_ACTIVE) != 0;
-        boolean hasError = (stateFlags & PrivilegedState.HAS_ERROR) != 0;
+        applyStatus(
+                R.string.protection_partial,
+                R.string.protection_partial_detail,
+                R.drawable.bg_status_warning,
+                R.color.status_warning
+        );
+        reconnectShizukuButton.setText(R.string.retry_protection);
+        reconnectShizukuButton.setVisibility(View.VISIBLE);
+    }
 
-        if (mediaReady && volumeReady && !hasError) {
-            applyStatus(
-                    R.string.protection_active,
-                    volumeDesired
-                            ? R.string.protection_active_full_detail
-                            : R.string.protection_active_media_only_detail,
-                    R.drawable.bg_status_active,
-                    R.color.status_active
-            );
+    private void configureShizukuRecoveryAction(boolean privilegedRequested) {
+        if (!privilegedRequested) {
             reconnectShizukuButton.setVisibility(View.GONE);
+            return;
+        }
+        if (!shizukuController.isBinderAlive()) {
+            reconnectShizukuButton.setText(R.string.connect_shizuku);
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
+        } else if (!shizukuController.hasPermission()) {
+            reconnectShizukuButton.setText(R.string.request_shizuku_access);
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
+        } else if (!shizukuController.isRemoteConnected()) {
+            reconnectShizukuButton.setText(R.string.retry_protection);
+            reconnectShizukuButton.setVisibility(View.VISIBLE);
         } else {
-            applyStatus(
-                    R.string.protection_partial,
-                    R.string.protection_partial_detail,
-                    R.drawable.bg_status_warning,
-                    R.color.status_warning
-            );
             reconnectShizukuButton.setText(R.string.retry_protection);
             reconnectShizukuButton.setVisibility(View.VISIBLE);
         }
@@ -524,28 +552,72 @@ public final class MainActivity extends Activity {
     }
 
     private void scanVolumeInputDevices() {
-        if (!shizukuController.isRemoteConnected()) {
-            pendingDeviceScan = true;
-            Toast.makeText(this, R.string.connecting_before_scan, Toast.LENGTH_LONG).show();
-            shizukuController.requestPermissionOrConnect();
+        if (pendingDeviceScan) {
             return;
         }
 
+        if (!shizukuController.isRemoteConnected()) {
+            if (!shizukuController.isBinderAlive()) {
+                shizukuController.requestPermissionOrConnect();
+                refreshUi();
+                return;
+            }
+
+            pendingDeviceScan = true;
+            updateScanButtonState();
+            shizukuController.requestSetupConnection();
+
+            // A setup scan is a one-shot operation, not a mode. Never leave the UI locked forever
+            // if permission is denied or an OEM never completes the UserService bind callback.
+            scanDevicesButton.postDelayed(() -> {
+                if (!pendingDeviceScan || isDestroyed()) {
+                    return;
+                }
+                pendingDeviceScan = false;
+                shizukuController.releaseSetupConnection();
+                updateScanButtonState();
+                refreshUi();
+            }, 12_000L);
+            return;
+        }
+
+        pendingDeviceScan = false;
+        scanInProgress = true;
         scanDevicesButton.setEnabled(false);
         scanDevicesButton.setAlpha(0.55f);
         scanDevicesButton.setText(R.string.scanning);
         ioExecutor.execute(() -> {
             String[] scanned = shizukuController.listVolumeInputDevices();
             runOnUiThread(() -> {
+                scanInProgress = false;
+                shizukuController.releaseSetupConnection();
                 if (isDestroyed()) {
                     return;
                 }
-                scanDevicesButton.setEnabled(true);
-                scanDevicesButton.setAlpha(1.0f);
-                scanDevicesButton.setText(R.string.scan_devices);
+                updateScanButtonState();
                 showDevicePicker(scanned);
             });
         });
+    }
+
+    private void updateScanButtonState() {
+        if (scanInProgress) {
+            scanDevicesButton.setEnabled(false);
+            scanDevicesButton.setAlpha(0.55f);
+            scanDevicesButton.setText(R.string.scanning);
+            return;
+        }
+        if (pendingDeviceScan) {
+            scanDevicesButton.setEnabled(false);
+            scanDevicesButton.setAlpha(0.55f);
+            scanDevicesButton.setText(R.string.connecting_to_scan);
+            return;
+        }
+        scanDevicesButton.setEnabled(true);
+        scanDevicesButton.setAlpha(1.0f);
+        scanDevicesButton.setText(shizukuController.isRemoteConnected()
+                ? R.string.scan_devices
+                : R.string.connect_and_scan);
     }
 
     private void showDevicePicker(String[] encodedDevices) {
@@ -569,7 +641,6 @@ public final class MainActivity extends Activity {
         }
 
         if (values.isEmpty()) {
-            pendingProtectionEnable = false;
             Toast.makeText(
                     this,
                     ignoredInternalCount > 0
@@ -586,29 +657,17 @@ public final class MainActivity extends Activity {
                 .setTitle(R.string.choose_headset_device)
                 .setItems(items, (dialog, index) -> {
                     String selected = values.get(index);
-                    boolean completeProtectionSetup = pendingProtectionEnable;
-                    pendingProtectionEnable = false;
-                    shizukuController.setHeadsetVolumeGuard(
-                            selected,
-                            Preferences.headsetVolumeGuardEnabled(this)
-                    );
-                    if (completeProtectionSetup) {
-                        shizukuController.setProtectionEnabled(true);
-                        Toast.makeText(this, R.string.protection_setup_complete,
-                                Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, R.string.device_selected, Toast.LENGTH_SHORT).show();
-                    }
+                    // Selecting a headset while global protection is already requested should
+                    // immediately add the screen-off volume route. When protection is off we only
+                    // remember the device for later.
+                    boolean enableVolumeGuard = Preferences.privilegedMediaEnabled(this)
+                            || Preferences.headsetVolumeGuardEnabled(this);
+                    shizukuController.setHeadsetVolumeGuard(selected, enableVolumeGuard);
+                    Toast.makeText(this, R.string.device_selected, Toast.LENGTH_SHORT).show();
                     refreshUi();
                 })
-                .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
-                    pendingProtectionEnable = false;
-                    refreshUi();
-                })
-                .setOnCancelListener(dialog -> {
-                    pendingProtectionEnable = false;
-                    refreshUi();
-                })
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> refreshUi())
+                .setOnCancelListener(dialog -> refreshUi())
                 .show();
     }
 

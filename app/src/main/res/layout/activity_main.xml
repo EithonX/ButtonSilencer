@@ -124,7 +124,61 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Device selection is the only other primary task on this screen. -->
+        <!-- Accessibility is the primary screen-on engine, so setup/status stays on the main path. -->
+        <TextView
+            style="@style/TextEyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/primary_section_gap"
+            android:text="@string/accessibility_eyebrow" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_card"
+            android:elevation="1dp"
+            android:orientation="vertical"
+            android:padding="@dimen/card_padding">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/TextSectionTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/accessibility_filtering_title" />
+
+                <Switch
+                    android:id="@+id/accessibilityMasterSwitch"
+                    style="@style/WidgetSwitchCompact"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/accessibility_master" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/accessibilityStatus"
+                style="@style/StateMessage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+
+            <Button
+                android:id="@+id/openAccessibilityButton"
+                style="@style/WidgetSecondaryButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/enable_accessibility_service" />
+        </LinearLayout>
+
+        <!-- The selected evdev node is only needed for screen-off volume protection. -->
         <TextView
             style="@style/TextEyebrow"
             android:layout_width="wrap_content"
@@ -274,43 +328,28 @@
                 style="@style/TextEyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/accessibility_eyebrow" />
+                android:text="@string/accessibility_rules_eyebrow" />
 
             <TextView
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="5dp"
-                android:text="@string/accessibility_fallback_title" />
+                android:text="@string/accessibility_rules_title" />
 
             <TextView
-                android:id="@+id/accessibilityStatus"
-                style="@style/StateMessage"
+                style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp" />
-
-            <Button
-                android:id="@+id/openAccessibilityButton"
-                style="@style/WidgetSecondaryButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/enable_accessibility_service" />
-
-            <Switch
-                android:id="@+id/accessibilityMasterSwitch"
-                style="@style/WidgetSwitchRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/accessibility_master" />
+                android:layout_marginTop="6dp"
+                android:text="@string/accessibility_rules_help" />
 
             <Switch
                 android:id="@+id/accessibilityMediaSwitch"
                 style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:text="@string/accessibility_media" />
 
             <Switch

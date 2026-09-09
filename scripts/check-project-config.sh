@@ -16,11 +16,12 @@ manifest_path = app / 'src/main/AndroidManifest.xml'
 aidl_path = app / 'src/main/aidl/com/buttons/silencer/IPrivilegedBlocker.aidl'
 service_path = app / 'src/main/java/com/buttons/silencer/PrivilegedMediaKeyService.java'
 controller_path = app / 'src/main/java/com/buttons/silencer/ShizukuController.java'
+main_activity_path = app / 'src/main/java/com/buttons/silencer/MainActivity.java'
 workflow_path = root / '.github/workflows/build-apk.yml'
 strings_path = app / 'src/main/res/values/strings.xml'
 workflow = workflow_path.read_text(encoding='utf-8')
 
-required = [manifest_path, aidl_path, service_path, controller_path, workflow_path, strings_path]
+required = [manifest_path, aidl_path, service_path, controller_path, main_activity_path, workflow_path, strings_path]
 for path in required:
     if not path.is_file():
         raise SystemExit(f'Missing required file: {path}')
@@ -43,7 +44,7 @@ checks = {
     'CI captures full Gradle log': 'tee .ci/gradle.log' in workflow and '.ci/gradle.log' in workflow,
     'APK alignment verification': 'zipalign' in workflow and '-P 16 -v 4' in workflow,
     'APK signature verification': 'apksigner' in workflow,
-    '3.1.3 CI version base': '313000 + GITHUB_RUN_NUMBER' in workflow,
+    '3.1.4 CI version base': '314000 + GITHUB_RUN_NUMBER' in workflow,
 }
 for label, ok in checks.items():
     if not ok:
@@ -174,6 +175,27 @@ if constructor_pos < 0 or assignment_pos < 0:
     raise SystemExit('Shizuku controller regression: reconnectRunnable assignment missing from constructor')
 if controller.find('private final Runnable reconnectRunnable =') >= 0:
     raise SystemExit('Shizuku controller regression: reconnectRunnable captures context before construction')
+
+
+# Guard the interaction regression that caused 3.1.3 to wait forever: the main protection switch
+# must persist the protection request before any optional headset scan, and scans must be able to
+# create a temporary Shizuku connection even while protection itself is off.
+main_activity = main_activity_path.read_text(encoding='utf-8')
+listener_start = main_activity.find('protectionSwitch.setOnCheckedChangeListener')
+listener_end = main_activity.find('mediaListenerSwitch.setOnCheckedChangeListener', listener_start)
+if listener_start < 0 or listener_end < 0:
+    raise SystemExit('Protection choreography check failed: primary switch listener not found')
+primary_listener = main_activity[listener_start:listener_end]
+if 'setProtectionEnabled(true)' not in primary_listener:
+    raise SystemExit('Protection choreography check failed: primary switch does not request protection')
+if 'scanVolumeInputDevices()' in primary_listener or 'headsetVolumeDevice' in primary_listener:
+    raise SystemExit('Protection choreography check failed: headset selection must not gate protection')
+if 'pendingProtectionEnable' in main_activity:
+    raise SystemExit('Protection choreography check failed: legacy pendingProtectionEnable deadlock returned')
+if 'requestSetupConnection()' not in controller or 'setupConnectionRequested' not in controller:
+    raise SystemExit('Shizuku setup check failed: temporary setup connection path is missing')
+if '!Preferences.privilegedProtectionRequested(context) && !setupConnectionRequested' not in controller:
+    raise SystemExit('Shizuku setup check failed: setup connection cannot bypass protection preference')
 
 print(f'Project preflight passed: {len(xml_files)} XML files, {len(ids)} view IDs.')
 PY

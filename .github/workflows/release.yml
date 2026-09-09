@@ -1,31 +1,40 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: release
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - name: Verify release tag
+      - name: Resolve release version
+        id: version
         shell: bash
         run: |
           set -euo pipefail
           version="$(sed -n 's/^appVersion=//p' gradle.properties)"
-          test "$GITHUB_REF_NAME" = "v$version"
+          test -n "$version"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            test "$GITHUB_REF_NAME" = "v$version"
+          fi
           echo "APP_VERSION=$version" >> "$GITHUB_ENV"
+          echo "app_version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Verify native libraries
         run: bash scripts/verify-native-libs.sh
@@ -72,12 +81,17 @@ jobs:
           test -n "$RELEASE_STORE_PASSWORD"
           test -n "$RELEASE_KEY_ALIAS"
           test -n "$RELEASE_KEY_PASSWORD"
-          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/button-silencer-release.jks"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/button-silencer-release.p12"
+          keytool -list \
+            -keystore "$RUNNER_TEMP/button-silencer-release.p12" \
+            -storetype PKCS12 \
+            -storepass "$RELEASE_STORE_PASSWORD" \
+            -alias "$RELEASE_KEY_ALIAS" >/dev/null
 
       - name: Build signed release APK
         shell: bash
         env:
-          BUTTON_SILENCER_KEYSTORE: ${{ runner.temp }}/button-silencer-release.jks
+          BUTTON_SILENCER_KEYSTORE: ${{ runner.temp }}/button-silencer-release.p12
           BUTTON_SILENCER_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           BUTTON_SILENCER_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           BUTTON_SILENCER_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
@@ -86,7 +100,7 @@ jobs:
           gradle --no-daemon --stacktrace --console=plain \
             clean testDebugUnitTest lintRelease assembleRelease
 
-      - name: Verify release APK
+      - name: Verify signed APK
         shell: bash
         run: |
           set -euo pipefail
@@ -95,23 +109,52 @@ jobs:
           mkdir -p dist
           cp "$apk" "dist/ButtonSilencer-$APP_VERSION.apk"
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "dist/ButtonSilencer-$APP_VERSION.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "dist/ButtonSilencer-$APP_VERSION.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+            --verbose \
+            --print-certs \
+            "dist/ButtonSilencer-$APP_VERSION.apk" \
+            | tee dist/SIGNING_CERTIFICATE.txt
           sha256sum "dist/ButtonSilencer-$APP_VERSION.apk" > dist/SHA256SUMS.txt
+
+      - name: Upload signed release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ButtonSilencer-signed-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove signing key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/button-silencer-release.p12"
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download signed release package
+        uses: actions/download-artifact@v8
+        with:
+          name: ButtonSilencer-signed-${{ github.run_number }}
+          path: dist
 
       - name: Publish GitHub release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_VERSION: ${{ needs.build.outputs.app_version }}
         run: |
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" \
             "dist/ButtonSilencer-$APP_VERSION.apk" \
             dist/SHA256SUMS.txt \
+            dist/SIGNING_CERTIFICATE.txt \
             --verify-tag \
             --title "Button Silencer $APP_VERSION" \
             --generate-notes
-
-      - name: Remove signing key
-        if: always()
-        shell: bash
-        run: rm -f "$RUNNER_TEMP/button-silencer-release.jks"

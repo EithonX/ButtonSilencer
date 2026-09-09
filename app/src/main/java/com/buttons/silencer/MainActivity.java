@@ -8,9 +8,11 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
 import android.widget.Switch;
@@ -64,6 +66,7 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        applyEdgeToEdgeInsets();
 
         shizukuController = ((ButtonSilencerApp) getApplication()).getShizukuController();
         bindViews();
@@ -96,6 +99,30 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         ioExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+
+    private void applyEdgeToEdgeInsets() {
+        // Android 15+ enforces edge-to-edge for apps targeting modern SDKs. Older Android versions
+        // keep their normal decor fitting, so only add explicit system-bar padding where needed.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            return;
+        }
+
+        View root = findViewById(R.id.rootScroll);
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            android.graphics.Insets systemBars = insets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()
+            );
+            view.setPadding(
+                    systemBars.left,
+                    systemBars.top,
+                    systemBars.right,
+                    systemBars.bottom
+            );
+            return insets;
+        });
+        root.requestApplyInsets();
     }
 
     private void bindViews() {
@@ -280,10 +307,12 @@ public final class MainActivity extends Activity {
             selectedDeviceName.setText(R.string.no_headset_selected);
             selectedDevicePath.setText(R.string.scan_device_hint);
             forgetDeviceButton.setEnabled(false);
+            forgetDeviceButton.setAlpha(0.45f);
         } else {
             selectedDeviceName.setText(selectedDevice.name);
             selectedDevicePath.setText(selectedDevice.path);
             forgetDeviceButton.setEnabled(true);
+            forgetDeviceButton.setAlpha(1.0f);
         }
 
         updateProtectionStatus(
@@ -334,6 +363,7 @@ public final class MainActivity extends Activity {
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
+            reconnectShizukuButton.setText(R.string.connect_shizuku);
             reconnectShizukuButton.setVisibility(View.VISIBLE);
             return;
         }
@@ -345,6 +375,7 @@ public final class MainActivity extends Activity {
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
+            reconnectShizukuButton.setText(R.string.request_shizuku_access);
             reconnectShizukuButton.setVisibility(View.VISIBLE);
             return;
         }
@@ -356,6 +387,7 @@ public final class MainActivity extends Activity {
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
+            reconnectShizukuButton.setText(R.string.connect_shizuku);
             reconnectShizukuButton.setVisibility(View.VISIBLE);
             return;
         }
@@ -383,6 +415,7 @@ public final class MainActivity extends Activity {
                     R.drawable.bg_status_warning,
                     R.color.status_warning
             );
+            reconnectShizukuButton.setText(R.string.retry_protection);
             reconnectShizukuButton.setVisibility(View.VISIBLE);
         }
     }
@@ -408,6 +441,7 @@ public final class MainActivity extends Activity {
         }
 
         scanDevicesButton.setEnabled(false);
+        scanDevicesButton.setAlpha(0.55f);
         scanDevicesButton.setText(R.string.scanning);
         ioExecutor.execute(() -> {
             String[] scanned = shizukuController.listVolumeInputDevices();
@@ -416,6 +450,7 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 scanDevicesButton.setEnabled(true);
+                scanDevicesButton.setAlpha(1.0f);
                 scanDevicesButton.setText(R.string.scan_devices);
                 showDevicePicker(scanned);
             });

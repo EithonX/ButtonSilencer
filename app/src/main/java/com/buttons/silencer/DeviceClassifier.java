@@ -15,7 +15,7 @@ final class DeviceClassifier {
         }
 
         // InputDevice.isExternal() was added in API 29. Keep the app usable on the
-        // declared minimum API 23 without triggering lint or a runtime linkage error.
+        // declared minimum API 26 without triggering lint or a runtime linkage error.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && device.isExternal()) {
             return true;
         }

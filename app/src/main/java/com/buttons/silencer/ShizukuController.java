@@ -54,31 +54,16 @@ final class ShizukuController {
             if (!binding || remote != null) {
                 return;
             }
+            // Drop a stale app-side binding before trying again. Keep the daemon itself alive;
+            // a late callback from an abandoned bind must not wedge future reconnect attempts.
+            detachUserServiceConnection();
             binding = false;
             setLocalStatus("Privileged service connection timed out; retrying");
             scheduleReconnect();
         }
     };
 
-    private final Runnable reconnectRunnable = () -> {
-        reconnectScheduled = false;
-        if (!Preferences.privilegedProtectionRequested(context) || remote != null || binding) {
-            return;
-        }
-        if (!isBinderAlive()) {
-            // Binder-received is the wake-up signal. Do not poll a dead Shizuku service.
-            return;
-        }
-        try {
-            if (!Shizuku.isPreV11()
-                    && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                bindPrivilegedService();
-            }
-        } catch (RuntimeException exception) {
-            setLocalStatus("Shizuku reconnect failed: " + concise(exception));
-            scheduleReconnect();
-        }
-    };
+    private final Runnable reconnectRunnable;
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -124,6 +109,27 @@ final class ShizukuController {
 
     ShizukuController(Context context) {
         this.context = context.getApplicationContext();
+        reconnectRunnable = () -> {
+            reconnectScheduled = false;
+            if (!Preferences.privilegedProtectionRequested(this.context)
+                    || remote != null || binding) {
+                return;
+            }
+            if (!isBinderAlive()) {
+                // Binder-received is the wake-up signal. Do not poll a dead Shizuku service.
+                return;
+            }
+            try {
+                if (!Shizuku.isPreV11()
+                        && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                    bindPrivilegedService();
+                }
+            } catch (RuntimeException exception) {
+                setLocalStatus("Shizuku reconnect failed: " + concise(exception));
+                scheduleReconnect();
+            }
+        };
+
         userServiceArgs = new Shizuku.UserServiceArgs(
                 new ComponentName(this.context, PrivilegedMediaKeyService.class)
         )
@@ -488,6 +494,16 @@ final class ShizukuController {
         clearRemoteBinder();
         setLocalStatus(prefix + ": " + concise(exception));
         scheduleReconnect();
+    }
+
+    private void detachUserServiceConnection() {
+        try {
+            if (isBinderAlive() && !Shizuku.isPreV11()) {
+                Shizuku.unbindUserService(userServiceArgs, serviceConnection, false);
+            }
+        } catch (RuntimeException ignored) {
+            // The bind may not have completed yet; reconnect logic can safely continue.
+        }
     }
 
     private synchronized void scheduleReconnect() {

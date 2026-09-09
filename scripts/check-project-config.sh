@@ -15,10 +15,12 @@ build = (app / 'build.gradle').read_text(encoding='utf-8')
 manifest_path = app / 'src/main/AndroidManifest.xml'
 aidl_path = app / 'src/main/aidl/com/buttons/silencer/IPrivilegedBlocker.aidl'
 service_path = app / 'src/main/java/com/buttons/silencer/PrivilegedMediaKeyService.java'
+controller_path = app / 'src/main/java/com/buttons/silencer/ShizukuController.java'
 workflow_path = root / '.github/workflows/build-apk.yml'
 strings_path = app / 'src/main/res/values/strings.xml'
+workflow = workflow_path.read_text(encoding='utf-8')
 
-required = [manifest_path, aidl_path, service_path, workflow_path, strings_path]
+required = [manifest_path, aidl_path, service_path, controller_path, workflow_path, strings_path]
 for path in required:
     if not path.is_file():
         raise SystemExit(f'Missing required file: {path}')
@@ -28,10 +30,19 @@ checks = {
     'compileSdk 36': re.search(r'^\s*compileSdk\s+36(?:\s|$)', build, re.M),
     'Shizuku API': "implementation 'dev.rikka.shizuku:api:13.1.5'" in build,
     'Shizuku provider': "implementation 'dev.rikka.shizuku:provider:13.1.5'" in build,
+    'AndroidX annotations on compile classpath': "compileOnly 'androidx.annotation:annotation:1.9.1'" in build,
     'no desugaring dependency': 'coreLibraryDesugaring' not in build,
     'release shrinking': 'minifyEnabled true' in build and 'shrinkResources true' in build,
-    'workflow invokes preflight via bash': 'run: bash scripts/check-project-config.sh' in workflow_path.read_text(encoding='utf-8'),
+    'workflow invokes preflight via bash': 'run: bash scripts/check-project-config.sh' in workflow,
     'developer credit': 'https://github.com/EithonX/' in strings_path.read_text(encoding='utf-8'),
+    'current checkout action': 'actions/checkout@v6' in workflow,
+    'current Gradle action': 'gradle/actions/setup-gradle@v6' in workflow,
+    'Android SDK action': 'android-actions/setup-android@v4' in workflow,
+    'compile both variants in CI': ':app:compileDebugJavaWithJavac' in workflow and ':app:compileReleaseJavaWithJavac' in workflow,
+    'release lint and build in CI': 'lintRelease' in workflow and 'assembleRelease' in workflow,
+    'APK alignment verification': 'zipalign' in workflow and '-P 16 -v 4' in workflow,
+    'APK signature verification': 'apksigner' in workflow,
+    '3.1.1 CI version base': '311000 + GITHUB_RUN_NUMBER' in workflow,
 }
 for label, ok in checks.items():
     if not ok:
@@ -78,7 +89,7 @@ for path in res_root.rglob('*'):
             name = child.attrib.get('name')
             if name:
                 resources.setdefault(child.tag, set()).add(name)
-    elif resource_type in {'layout', 'drawable', 'mipmap', 'xml'}:
+    elif resource_type in {'layout', 'drawable', 'mipmap', 'xml', 'color'}:
         resources.setdefault(resource_type, set()).add(path.stem)
     if path.suffix == '.xml':
         ids.update(re.findall(r'@\+id/([A-Za-z0-9_]+)', path.read_text(encoding='utf-8')))
@@ -87,7 +98,7 @@ missing = []
 for path in list((app / 'src/main').rglob('*.xml')) + list((app / 'src/main/java').rglob('*.java')):
     text = path.read_text(encoding='utf-8')
     for resource_type, name in re.findall(
-        r'@(?:\+)?(string|color|style|layout|drawable|mipmap|xml)/([A-Za-z0-9_.]+)',
+        r'@(?:\+)?(string|color|style|layout|drawable|mipmap|xml|dimen)/([A-Za-z0-9_.]+)',
         text,
     ):
         if name not in resources.get(resource_type, set()):
@@ -135,6 +146,17 @@ for required_text in (
 ):
     if required_text not in service:
         raise SystemExit(f'Privileged service check failed: {required_text}')
+
+
+controller = controller_path.read_text(encoding='utf-8')
+if 'private final Runnable reconnectRunnable;' not in controller:
+    raise SystemExit('Shizuku controller regression: reconnectRunnable must be constructor-initialized')
+constructor_pos = controller.find('ShizukuController(Context context)')
+assignment_pos = controller.find('reconnectRunnable = () ->', constructor_pos)
+if constructor_pos < 0 or assignment_pos < 0:
+    raise SystemExit('Shizuku controller regression: reconnectRunnable assignment missing from constructor')
+if controller.find('private final Runnable reconnectRunnable =') >= 0:
+    raise SystemExit('Shizuku controller regression: reconnectRunnable captures context before construction')
 
 print(f'Project preflight passed: {len(xml_files)} XML files, {len(ids)} view IDs.')
 PY

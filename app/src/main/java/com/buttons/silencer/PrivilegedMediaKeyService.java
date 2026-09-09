@@ -15,6 +15,7 @@ import android.os.SystemClock;
 import android.view.KeyEvent;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
@@ -329,7 +330,8 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             volumeGuardError = "Scan and select the headset input device first";
             return;
         }
-        if (requested.likelyInternal) {
+        if (requested.likelyInternal
+                || VolumeInputDeviceParser.isLikelyInternal(requested.name)) {
             volumeGuardError = "Refusing a device that looks like the phone's own buttons";
             return;
         }
@@ -382,7 +384,9 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     ) throws Exception {
         List<VolumeInputDeviceParser.Device> devices = scanVolumeDevices();
         for (VolumeInputDeviceParser.Device candidate : devices) {
-            if (candidate.path.equals(requested.path) && candidate.name.equals(requested.name)) {
+            if (!candidate.likelyInternal
+                    && candidate.path.equals(requested.path)
+                    && candidate.name.equals(requested.name)) {
                 return candidate;
             }
         }
@@ -546,6 +550,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void registerVolumeReceiverLocked() {
         if (volumeReceiver != null || context == null) {
             return;
@@ -599,36 +604,58 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
             return;
         }
         try {
-            inputObserver = new FileObserver(
-                    INPUT_DIR,
-                    FileObserver.CREATE
-                            | FileObserver.DELETE
-                            | FileObserver.MOVED_FROM
-                            | FileObserver.MOVED_TO
-                            | FileObserver.DELETE_SELF
-                            | FileObserver.MOVE_SELF
-            ) {
-                @Override
-                public void onEvent(int event, String path) {
-                    callbackHandler.post(() -> {
-                        synchronized (lock) {
-                            if (!volumeGuardEnabled || volumeGuardActive) {
-                                return;
-                            }
-                            // A USB/input-node change is the strongest signal that a reconnect can
-                            // succeed. Restart the bounded backoff immediately, without polling.
-                            cancelVolumeRecoveryLocked();
-                            volumeRecoveryAttempt = 0;
-                            scheduleVolumeRecoveryLocked();
-                        }
-                    });
-                }
-            };
+            final int mask = FileObserver.CREATE
+                    | FileObserver.DELETE
+                    | FileObserver.MOVED_FROM
+                    | FileObserver.MOVED_TO
+                    | FileObserver.DELETE_SELF
+                    | FileObserver.MOVE_SELF;
+            inputObserver = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                    ? createModernInputObserver(mask)
+                    : createLegacyInputObserver(mask);
             inputObserver.startWatching();
         } catch (RuntimeException exception) {
             inputObserver = null;
             volumeGuardWarning = "Input-node observer unavailable: " + concise(exception);
         }
+    }
+
+    @SuppressLint("NewApi")
+    private FileObserver createModernInputObserver(int mask) {
+        return new FileObserver(new File(INPUT_DIR), mask) {
+            @Override
+            public void onEvent(int event, String path) {
+                onInputDirectoryChanged(path);
+            }
+        };
+    }
+
+    @SuppressWarnings("deprecation")
+    private FileObserver createLegacyInputObserver(int mask) {
+        return new FileObserver(INPUT_DIR, mask) {
+            @Override
+            public void onEvent(int event, String path) {
+                onInputDirectoryChanged(path);
+            }
+        };
+    }
+
+    private void onInputDirectoryChanged(String path) {
+        if (path != null && !path.startsWith("event")) {
+            return;
+        }
+        callbackHandler.post(() -> {
+            synchronized (lock) {
+                if (!volumeGuardEnabled || volumeGuardActive) {
+                    return;
+                }
+                // A USB/input-node change is the strongest signal that a reconnect can succeed.
+                // Restart the bounded backoff immediately, without permanent polling.
+                cancelVolumeRecoveryLocked();
+                volumeRecoveryAttempt = 0;
+                scheduleVolumeRecoveryLocked();
+            }
+        });
     }
 
     private void stopInputObserverLocked() {

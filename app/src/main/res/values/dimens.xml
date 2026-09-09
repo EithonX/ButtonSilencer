@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="screen_gutter">18dp</dimen>
-    <dimen name="screen_top">20dp</dimen>
+    <dimen name="screen_top">18dp</dimen>
+    <dimen name="screen_bottom">36dp</dimen>
+    <dimen name="hero_padding">20dp</dimen>
     <dimen name="card_padding">18dp</dimen>
-    <dimen name="section_gap">14dp</dimen>
+    <dimen name="primary_section_gap">28dp</dimen>
+    <dimen name="secondary_section_gap">20dp</dimen>
 </resources>

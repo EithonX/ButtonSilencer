@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootScroll"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
     android:clipToPadding="false"
     android:fillViewport="true"
-    android:overScrollMode="ifContentScrolls">
+    android:overScrollMode="ifContentScrolls"
+    android:scrollbarStyle="outsideOverlay">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -14,9 +16,9 @@
         android:paddingStart="@dimen/screen_gutter"
         android:paddingTop="@dimen/screen_top"
         android:paddingEnd="@dimen/screen_gutter"
-        android:paddingBottom="40dp">
+        android:paddingBottom="@dimen/screen_bottom">
 
-        <!-- Product identity stays compact. The operational state is the real hero. -->
+        <!-- Compact identity. Operational state, not branding, owns the screen. -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -24,9 +26,10 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:contentDescription="@string/app_icon_description"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:contentDescription="@null"
+                android:importantForAccessibility="no"
                 android:src="@mipmap/ic_launcher" />
 
             <LinearLayout
@@ -37,103 +40,84 @@
                 android:orientation="vertical">
 
                 <TextView
+                    style="@style/TextAppTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:text="@string/app_name"
-                    android:textColor="@color/text_primary"
-                    android:textSize="24sp" />
+                    android:text="@string/app_name" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="1dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/tagline"
                     android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/versionText"
+                style="@style/VersionChip"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_version_chip"
-                android:paddingStart="9dp"
-                android:paddingTop="5dp"
-                android:paddingEnd="9dp"
-                android:paddingBottom="5dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
+                android:layout_height="wrap_content" />
         </LinearLayout>
 
+        <!-- The real hero: are unwanted headset controls actually neutralized right now? -->
         <LinearLayout
             android:id="@+id/protectionStatusCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_marginTop="24dp"
             android:background="@drawable/bg_status_inactive"
+            android:elevation="1dp"
             android:orientation="vertical"
-            android:padding="@dimen/card_padding">
+            android:padding="@dimen/hero_padding">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="top"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <TextView
                     android:id="@+id/statusDot"
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
                     android:background="@drawable/bg_status_orb"
                     android:gravity="center"
+                    android:importantForAccessibility="no"
                     android:text="@string/status_dot"
                     android:textColor="@color/status_inactive"
-                    android:textSize="22sp" />
+                    android:textSize="21sp" />
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/protectionStatusTitle"
+                    style="@style/TextHeroTitle"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/protectionStatusTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:fontFamily="sans-serif-medium"
-                        android:textColor="@color/text_primary"
-                        android:textSize="20sp" />
-
-                    <TextView
-                        android:id="@+id/protectionStatusDetail"
-                        style="@style/TextBody"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp" />
-                </LinearLayout>
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <TextView
-                android:id="@+id/runtimeStatusText"
+                android:id="@+id/protectionStatusDetail"
+                style="@style/TextHeroBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:background="@drawable/bg_runtime_chip"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:paddingStart="12dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="8dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
+                android:layout_marginTop="12dp" />
+
+            <TextView
+                android:id="@+id/runtimeStatusText"
+                style="@style/RuntimeStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" />
 
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="16dp"
                 android:background="@color/status_divider" />
 
             <Switch
@@ -149,56 +133,81 @@
                 style="@style/WidgetPrimaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="10dp"
                 android:text="@string/connect_shizuku"
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- Device selection is the only other primary task on this screen. -->
+        <TextView
+            style="@style/TextEyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/primary_section_gap"
+            android:text="@string/headset_device_eyebrow" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/section_gap"
+            android:layout_marginTop="8dp"
             android:background="@drawable/bg_card"
+            android:elevation="1dp"
             android:orientation="vertical"
             android:padding="@dimen/card_padding">
 
-            <TextView
-                style="@style/TextEyebrow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/headset_device_eyebrow" />
-
-            <TextView
-                android:id="@+id/selectedDeviceName"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="sans-serif-medium"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/selectedDevicePath"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:ellipsize="middle"
-                android:fontFamily="monospace"
-                android:maxLines="1"
-                android:textColor="@color/text_tertiary"
-                android:textSize="11sp" />
+                <FrameLayout
+                    android:layout_width="46dp"
+                    android:layout_height="46dp"
+                    android:background="@drawable/bg_icon_well"
+                    android:padding="10dp">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@null"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_headset" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="13dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/selectedDeviceName"
+                        style="@style/TextDeviceName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <TextView
+                        android:id="@+id/selectedDevicePath"
+                        style="@style/TextDevicePath"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp" />
+                </LinearLayout>
+            </LinearLayout>
 
             <TextView
                 style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="14dp"
                 android:text="@string/headset_device_explanation" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="16dp"
                 android:orientation="horizontal">
 
                 <Button
@@ -220,19 +229,20 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Secondary controls stay visually quiet until explicitly opened. -->
         <TextView
             android:id="@+id/advancedHeader"
             style="@style/WidgetDisclosure"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/section_gap" />
+            android:layout_marginTop="@dimen/secondary_section_gap" />
 
         <LinearLayout
             android:id="@+id/advancedContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_card"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_panel"
             android:orientation="vertical"
             android:padding="@dimen/card_padding"
             android:visibility="gone">
@@ -247,7 +257,7 @@
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/privileged_routes_title" />
 
             <Switch
@@ -269,7 +279,7 @@
                 style="@style/TextBody"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
+                android:layout_marginTop="6dp"
                 android:text="@string/privileged_routes_help" />
 
             <View style="@style/SectionDivider" />
@@ -284,23 +294,22 @@
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/accessibility_fallback_title" />
 
             <TextView
                 android:id="@+id/accessibilityStatus"
+                style="@style/TextMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
+                android:layout_marginTop="7dp" />
 
             <Switch
                 android:id="@+id/accessibilityMasterSwitch"
                 style="@style/WidgetSwitchRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="4dp"
                 android:text="@string/accessibility_master" />
 
             <Switch
@@ -341,24 +350,22 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="horizontal">
+                android:layout_marginTop="12dp"
+                android:orientation="vertical">
 
                 <Button
                     android:id="@+id/openAccessibilityButton"
                     style="@style/WidgetSecondaryButton"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:text="@string/open_accessibility" />
 
                 <Button
                     android:id="@+id/openAppInfoButton"
                     style="@style/WidgetSecondaryButton"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp"
-                    android:layout_weight="1"
+                    android:layout_marginTop="8dp"
                     android:text="@string/open_app_info" />
             </LinearLayout>
 
@@ -374,7 +381,7 @@
                 style="@style/TextSectionTitle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/diagnostics_title" />
 
             <Switch
@@ -394,7 +401,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="12dp"
                 android:orientation="horizontal">
 
                 <Button
@@ -419,10 +426,10 @@
                 android:id="@+id/diagnosticsText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/bg_code_panel"
                 android:fontFamily="monospace"
-                android:padding="12dp"
+                android:padding="13dp"
                 android:textColor="@color/text_secondary"
                 android:textIsSelectable="true"
                 android:textSize="11sp" />
@@ -433,14 +440,14 @@
             style="@style/WidgetDisclosure"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp" />
+            android:layout_marginTop="4dp" />
 
         <LinearLayout
             android:id="@+id/aboutContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_card"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_panel"
             android:orientation="vertical"
             android:padding="@dimen/card_padding"
             android:visibility="gone">
@@ -462,20 +469,18 @@
                 style="@style/TextEyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="18dp"
                 android:text="@string/developer_label" />
 
             <TextView
+                style="@style/TextDeviceName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:fontFamily="sans-serif-medium"
-                android:text="@string/developer_name"
-                android:textColor="@color/text_primary"
-                android:textSize="17sp" />
+                android:layout_marginTop="5dp"
+                android:text="@string/developer_name" />
 
             <TextView
-                style="@style/TextBody"
+                style="@style/TextMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
@@ -486,7 +491,7 @@
                 style="@style/WidgetSecondaryButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="12dp"
                 android:text="@string/open_developer_github" />
 
             <View style="@style/SectionDivider" />
@@ -496,14 +501,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/privacy_note" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/footer_note"
-                android:textColor="@color/text_tertiary"
-                android:textSize="12sp" />
         </LinearLayout>
+
+        <TextView
+            style="@style/TextFooter"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/footer_note" />
     </LinearLayout>
 </ScrollView>

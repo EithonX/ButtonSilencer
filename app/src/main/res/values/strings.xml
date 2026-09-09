@@ -24,6 +24,8 @@
     <string name="connecting">Connecting privileged guard</string>
     <string name="connecting_detail">The screen-off protection service is being attached.</string>
     <string name="connect_shizuku">Reconnect Shizuku</string>
+    <string name="request_shizuku_access">Request Shizuku access</string>
+    <string name="retry_protection">Retry protection</string>
 
     <string name="headset_device_eyebrow">Selected input</string>
     <string name="headset_device_title">Headset volume device</string>
@@ -42,8 +44,8 @@
     <string name="device_selected">Headset device selected</string>
     <string name="device_forgotten">Headset device forgotten</string>
 
-    <string name="advanced_show">Advanced settings  +</string>
-    <string name="advanced_hide">Advanced settings  −</string>
+    <string name="advanced_show">Advanced settings  ↓</string>
+    <string name="advanced_hide">Advanced settings  ↑</string>
     <string name="privileged_routes_eyebrow">Screen-off engine</string>
     <string name="privileged_routes_title">Privileged blocking routes</string>
     <string name="media_listener_switch">Block headset and media buttons</string>
@@ -76,8 +78,8 @@
     <string name="diagnostics_disabled_message">Detailed Accessibility logging is off.</string>
     <string name="no_events">No recognized Accessibility events in this session.</string>
 
-    <string name="about_show">About  +</string>
-    <string name="about_hide">About  −</string>
+    <string name="about_show">About  ↓</string>
+    <string name="about_hide">About  ↑</string>
     <string name="about_title">About Button Silencer</string>
     <string name="about_description">A compact Android utility for suppressing unwanted headset controls while keeping the phone’s physical buttons usable.</string>
     <string name="developer_label">Developer</string>

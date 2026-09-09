@@ -1,8 +1,8 @@
-# Button Silencer 3.1 — QA and device verification
+# Button Silencer 3.1.1 — QA and device verification
 
 ## What was audited
 
-The 3.1 pass focused on the two failure modes most likely to explain intermittent screen-off protection loss and the earlier heat concern:
+The 3.1.1 pass focused on the two failure modes most likely to explain intermittent screen-off protection loss and the earlier heat concern:
 
 1. the app-side Shizuku/UserService connection lifecycle;
 2. the selected headset `/dev/input/event*` monitor lifecycle.
@@ -11,10 +11,12 @@ The visual hierarchy was also rebuilt around the actual operational task: see pr
 
 ## Reliability fixes included
 
+- Fixed the GitHub Actions Java compile failure where `reconnectRunnable` captured the final `context` field from an instance initializer before the constructor assigned it. The runnable is now initialized inside the constructor, and the preflight script guards against regressing to the broken pattern.
+- Added AndroidX annotations to the compile-only classpath so Shizuku's `RestrictTo.Scope` metadata no longer produces the repeated missing-annotation javac warnings.
 - Sticky Shizuku binder listener for app-process reconnects.
 - Direct death-recipient tracking for the privileged UserService binder.
 - Rebind on UserService disconnect/binding death while Shizuku is still alive.
-- Eight-second bind timeout so a stuck bind cannot leave `binding=true` forever.
+- Eight-second bind timeout so a stuck bind cannot leave `binding=true` forever; timeout cleanup detaches the stale app-side UserService connection before a retry.
 - Bounded reconnect delays instead of permanent keep-alive polling.
 - Stable Shizuku UserService tag; `versionCode` is used to replace stale daemon code on upgrades.
 - `/dev/input` `FileObserver` to react to USB/input-node create/delete/move events.
@@ -36,11 +38,13 @@ The visual hierarchy was also rebuilt around the actual operational task: see pr
 
 ## Static validation completed in this workspace
 
-- Project preflight script passed: XML/resource structure and required view IDs are present.
-- All resource XML is well-formed.
+- Project preflight script passed: XML/resource structure, required view IDs, build invariants, workflow invariants, and the `reconnectRunnable` regression guard are all present.
+- All resource XML is well-formed and referenced file/value resources resolve in the source tree.
 - Every `MainActivity` view ID used by Java exists in the redesigned layout.
-- Java source passed a parser-level `javac` syntax check. Full Android symbol resolution was not possible because this runtime does not contain an Android SDK.
+- The real `ShizukuController.java` passed a Java 17 compiler-flow check against minimal Android/Shizuku API stubs, directly exercising the constructor/callback definite-assignment path that failed in GitHub Actions. Full Android symbol resolution is still delegated to CI because this runtime does not contain the Android SDK/AGP toolchain.
 - A standalone parser smoke test passed for external-headset ordering, encode/decode, and rejection of common internal phone-key device names.
+- Every shell `run:` block extracted from the GitHub Actions workflow passed `bash -n`, and the bundled debug signing keystore passed `keytool -list`.
+- The design-intelligence anti-slop detector reports zero generic-interface signals for the final layout/style pass.
 
 ## Physical-device regression matrix
 
@@ -61,4 +65,4 @@ Run these against the release APK before calling the build final:
 
 ## Build limitation of this workspace
 
-This environment has Java but no Gradle executable, Android SDK, `android.jar`, `aapt2`, or `apksigner`, and binary toolchain downloads are unavailable here. The included GitHub Actions workflow performs manifest/AIDL/resource processing, unit tests, Android lint, debug/release assembly, APK signature verification, and SHA-256 packaging using the required Android toolchain.
+This environment has Java but no Gradle executable, Android SDK, `android.jar`, `aapt2`, or `apksigner`, and binary toolchain downloads are unavailable here. The hardened GitHub Actions workflow therefore remains the authoritative end-to-end Android build: it compiles both Java/resource variants, runs unit tests and debug/release lint, assembles the minified release plus debug APK, verifies 16 KiB-aware alignment and APK signatures, writes SHA-256 hashes, and uploads Gradle/Android reports automatically on failure.

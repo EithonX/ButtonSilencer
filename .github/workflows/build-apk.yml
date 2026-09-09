@@ -100,7 +100,7 @@ jobs:
           sha256sum dist/*.apk > dist/SHA256SUMS.txt
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ButtonSilencer-ci-${{ github.run_number }}
           path: dist/
@@ -109,7 +109,7 @@ jobs:
 
       - name: Upload reports on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ButtonSilencer-build-reports-${{ github.run_number }}
           path: |

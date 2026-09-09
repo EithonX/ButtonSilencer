@@ -14,13 +14,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 
 import rikka.shizuku.Shizuku;
 
-/**
- * Owns the app-side Shizuku lifecycle.
- *
- * <p>The privileged UserService itself is a daemon, so it can keep blocking while this normal app
- * process is gone. This controller therefore does not poll. It reacts to Shizuku binder events and
- * to the UserService binder dying, with a small capped rebind backoff only after a real failure.</p>
- */
+/** Owns the app-side Shizuku permission, bind, and reconnect lifecycle. */
 final class ShizukuController {
     interface Observer {
         void onControllerStateChanged();
@@ -55,8 +49,7 @@ final class ShizukuController {
             if (!binding || remote != null) {
                 return;
             }
-            // Drop a stale app-side binding before trying again. Keep the daemon itself alive;
-            // a late callback from an abandoned bind must not wedge future reconnect attempts.
+            // Detach a timed-out app-side bind before retrying.
             detachUserServiceConnection();
             binding = false;
             setLocalStatus("Privileged service connection timed out; retrying");
@@ -124,7 +117,7 @@ final class ShizukuController {
                 return;
             }
             if (!isBinderAlive()) {
-                // Binder-received is the wake-up signal. Do not poll a dead Shizuku service.
+                // Binder callbacks drive reconnects; there is no polling loop.
                 return;
             }
             try {
@@ -142,8 +135,7 @@ final class ShizukuController {
                 new ComponentName(this.context, PrivilegedMediaKeyService.class)
         )
                 .daemon(true)
-                // Keep the tag stable across releases. version() is what tells Shizuku to
-                // replace an older daemon with the newly installed service code.
+                // Keep the tag stable; version() replaces stale daemon code.
                 .tag("button-silencer-privileged-v4")
                 .processNameSuffix("headset_guard")
                 .debuggable(BuildConfig.DEBUG)
@@ -198,11 +190,7 @@ final class ShizukuController {
         }
     }
 
-    /**
-     * Opens a temporary privileged connection for setup tasks such as enumerating /dev/input.
-     * This is intentionally separate from protection preferences so setup can work while the
-     * protection switch is off. Call {@link #releaseSetupConnection()} when the one-shot task ends.
-     */
+    /** Opens a temporary privileged connection for setup tasks such as input-device discovery. */
     void requestSetupConnection() {
         setupConnectionRequested = true;
         requestPermissionOrConnect();
@@ -239,9 +227,6 @@ final class ShizukuController {
         Preferences.putBoolean(context, Preferences.KEY_PRIVILEGED_MEDIA, enabled);
         String selected = Preferences.headsetVolumeDevice(context);
         if (enabled && !selected.isEmpty()) {
-            // Screen-off media protection plus a selected headset always arms the stronger raw
-            // input safety route as well. The media-session listener alone can be bypassed by
-            // global-priority sessions such as calls.
             Preferences.putBoolean(context, Preferences.KEY_HEADSET_VOLUME_GUARD, true);
         }
 
@@ -585,7 +570,6 @@ final class ShizukuController {
             try {
                 binder.unlinkToDeath(remoteDeathRecipient, 0);
             } catch (RuntimeException ignored) {
-                // Binder was already dead or unlinked.
             }
         }
     }

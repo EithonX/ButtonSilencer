@@ -50,11 +50,9 @@ public final class ButtonBlockerService extends AccessibilityService {
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        // Intentionally unused. The service does not inspect UI content.
     }
 
     @Override
     public void onInterrupt() {
-        // No ongoing feedback or work to interrupt.
     }
 }

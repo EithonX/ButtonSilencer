@@ -31,15 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * Runs in a Shizuku UserService process under shell/root identity.
- *
- * <p>The media-key listener is a broad screen-off fallback for ordinary media routing. For the
- * explicitly selected external headset, the raw-input guard uses Linux EVIOCGRAB on every matching
- * remote-capable evdev node. That exclusive kernel grab keeps media, volume, and call-control
- * button events from reaching Android at all. The phone's own side-button input nodes are never
- * selected or grabbed.</p>
- */
+/** Shizuku UserService for screen-off media interception and selected-device evdev grabs. */
 public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private static final String LISTENER_CLASS_NAME =
             "android.media.session.MediaSessionManager$OnMediaKeyListener";
@@ -84,12 +76,10 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
     private volatile String lastEvent = "No privileged media-key event received yet";
     private volatile String lastVolumeEvent = "No selected-headset raw input received yet";
 
-    /** Used by Shizuku versions older than v13. Privileged mode will report a clear error. */
     public PrivilegedMediaKeyService() {
         this(null);
     }
 
-    /** Preferred constructor used by Shizuku v13+. */
     public PrivilegedMediaKeyService(Context context) {
         this.context = context;
         callbackThread = new HandlerThread("ButtonSilencerPrivileged");
@@ -241,7 +231,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         }
     }
 
-    /** Shizuku reserves this AIDL transaction for stopping a daemon UserService. */
+    /** Reserved Shizuku transaction used to stop the daemon UserService. */
     @Override
     public void destroy() {
         synchronized (lock) {
@@ -331,11 +321,6 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         reconcileVolumeGuardLocked(requested);
     }
 
-    /**
-     * Makes the held EVIOCGRAB set match every currently visible remote-capable node for the
-     * selected headset name. Existing healthy grabs stay in place while newly appeared composite
-     * nodes are acquired, so a USB topology update does not create an avoidable call-safety gap.
-     */
     private void reconcileVolumeGuardLocked(VolumeInputDeviceParser.Device requested) {
         if (!volumeGuardEnabled) {
             return;
@@ -353,9 +338,7 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
 
             for (VolumeInputDeviceParser.Device device : resolved) {
                 if (!device.exclusiveGrabSafe) {
-                    // EVIOCGRAB owns the whole event node. Never take exclusive ownership of a
-                    // mixed keyboard or a node that also carries jack/audio-route switch state.
-                    // That could disable unrelated input or hide an unplug/routing transition.
+                    // EVIOCGRAB owns the whole node; mixed keyboard/routing nodes are unsafe.
                     volumeGuardActive = false;
                     volumeGuardError = "Cannot safely exclusively guard " + device.path + ": "
                             + device.unsafeGrabReason;
@@ -493,11 +476,6 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         return true;
     }
 
-    /**
-     * Re-resolves the selected external device by name and returns every remote-capable event node
-     * with that name. Event numbers can change after USB reconnects, and composite USB audio devices
-     * can expose call/media and volume controls as separate nodes.
-     */
     private List<VolumeInputDeviceParser.Device> resolveSelectedDevices(
             VolumeInputDeviceParser.Device requested
     ) throws Exception {
@@ -565,8 +543,6 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
 
         try {
             while (true) {
-                // Fully event-driven: the thread sleeps in poll() until the headset produces input,
-                // the node disconnects, or shutdown writes to the private cancellation pipe.
                 Os.poll(pollSet, -1);
 
                 synchronized (lock) {
@@ -647,19 +623,16 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         for (int index = inputs.size() - 1; index >= 0; index--) {
             GrabbedInput input = inputs.get(index);
 
-            // Wake poll() without periodic timers so teardown never leaves a reader thread parked on
-            // a dead/old fd. This is also why the guard can stay battery-idle when no buttons fire.
+            // Wake the blocking poll before closing its descriptors.
             try {
                 Os.write(input.cancelWrite.getFileDescriptor(), wake, 0, wake.length);
             } catch (ErrnoException | InterruptedIOException ignored) {
-                // Closing the pipe below also makes a waiting poll return.
             }
 
             if (input.grabbed) {
                 try {
                     EvdevExclusiveGuard.setGrab(input.descriptor.getFd(), false);
                 } catch (RuntimeException | LinkageError ignored) {
-                    // Closing the fd below also releases EVIOCGRAB in the kernel.
                 }
                 input.grabbed = false;
             }
@@ -676,7 +649,6 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
         try {
             descriptor.close();
         } catch (IOException ignored) {
-            // Device or cancellation pipe may already be gone.
         }
     }
 
@@ -732,17 +704,12 @@ public final class PrivilegedMediaKeyService extends IPrivilegedBlocker.Stub {
                 }
 
                 if (!grabbedInputs.isEmpty()) {
-                    // A composite USB remote may expose multiple event nodes. Re-scan after a short
-                    // debounce even while protection is active so a newly-created call-control node
-                    // is acquired without waiting for a failure on an already-grabbed node.
+                    // Composite USB remotes can add a second event node after the first appears.
                     scheduleInputTopologyReconcileLocked();
                     return;
                 }
 
-                // No node is held right now. A USB/input-node change is the strongest signal that a
-                // reconnect can succeed, so try immediately rather than leaving a deliberate
-                // call-safety window. Any race with a half-created node falls back to the normal
-                // bounded recovery delays; there is still no permanent polling loop.
+                // Topology changes are the fastest safe signal to retry after a disconnect.
                 cancelVolumeRecoveryLocked();
                 volumeRecoveryAttempt = 0;
                 startVolumeGuardLocked();

@@ -127,8 +127,7 @@ public final class MainActivity extends Activity {
 
 
     private void applyEdgeToEdgeInsets() {
-        // Android 15+ enforces edge-to-edge for apps targeting modern SDKs. Older Android versions
-        // keep their normal decor fitting, so only add explicit system-bar padding where needed.
+        // Android 15+ enforces edge-to-edge for this target SDK.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             return;
         }
@@ -185,9 +184,7 @@ public final class MainActivity extends Activity {
                 return;
             }
 
-            // This switch is intent, while the hero reports actual coverage. Enabling protection
-            // must never be blocked by one unavailable engine: Accessibility can protect screen-on
-            // independently, and Shizuku can recover the screen-off route asynchronously.
+            // The switch records intent; the status area reports actual protection coverage.
             if (!checked) {
                 if (!scanInProgress) {
                     pendingDeviceScan = false;
@@ -226,8 +223,6 @@ public final class MainActivity extends Activity {
                 return;
             }
             if (!checked && Preferences.privilegedMediaEnabled(this)) {
-                // A selected headset's raw guard is the call-safety route. Do not let an advanced
-                // toggle silently downgrade protection while screen-off Shizuku blocking is on.
                 updatingUi = true;
                 button.setChecked(true);
                 updatingUi = false;
@@ -357,9 +352,6 @@ public final class MainActivity extends Activity {
         protectionSwitch.setEnabled(true);
         mediaListenerSwitch.setChecked(mediaDesired);
         headsetVolumeGuardSwitch.setChecked(volumeDesired);
-        // While the screen-off media route is requested, a selected headset's raw guard is a
-        // safety dependency, not an independent preference. Present it as locked rather than
-        // letting the user toggle it only to be bounced back by a toast.
         headsetVolumeGuardSwitch.setEnabled(!selected.isEmpty() && !mediaDesired);
         diagnosticLoggingSwitch.setChecked(Preferences.diagnosticLoggingEnabled(this));
         accessibilityMediaSwitch.setChecked(Preferences.blockMedia(this));
@@ -589,8 +581,7 @@ public final class MainActivity extends Activity {
             updateScanButtonState();
             shizukuController.requestSetupConnection();
 
-            // A setup scan is a one-shot operation, not a mode. Never leave the UI locked forever
-            // if permission is denied or an OEM never completes the UserService bind callback.
+            // Bound setup work so a failed bind cannot leave scanning disabled.
             scanDevicesButton.postDelayed(() -> {
                 if (!pendingDeviceScan || isDestroyed()) {
                     return;
@@ -658,10 +649,7 @@ public final class MainActivity extends Activity {
                     ignoredInternalCount++;
                     continue;
                 }
-                // Composite USB audio devices can expose multiple event nodes with the same name.
-                // The privileged guard protects every matching remote-capable node together, so
-                // present one device choice rather than asking the user to guess which node carries
-                // volume versus call/media controls.
+                // Composite remotes can expose several event nodes under one device name.
                 if (!offeredNames.add(device.name)) {
                     continue;
                 }
@@ -687,9 +675,6 @@ public final class MainActivity extends Activity {
                 .setTitle(R.string.choose_headset_device)
                 .setItems(items, (dialog, index) -> {
                     String selected = values.get(index);
-                    // Selecting a headset while global protection is already requested immediately
-                    // arms the exclusive raw-input safety route. When protection is off we only
-                    // remember the device for later.
                     boolean enableVolumeGuard = Preferences.privilegedMediaEnabled(this)
                             || Preferences.headsetVolumeGuardEnabled(this);
                     shizukuController.setHeadsetVolumeGuard(selected, enableVolumeGuard);

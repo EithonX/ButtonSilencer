@@ -15,11 +15,6 @@ final class VolumeInputDeviceParser {
     private static final Pattern NAME_PATTERN =
             Pattern.compile("^\\s*name:\\s*\"(.*)\"\\s*$");
 
-    /**
-     * Linux input capabilities that are relevant to an inline headset/USB remote.  The selected
-     * device is grabbed as a whole, so this list is only for discovery; it is intentionally much
-     * narrower than every possible KEY_* capability to avoid offering keyboards and phone buttons.
-     */
     private static final String[] REMOTE_KEY_NAMES = {
             "KEY_VOLUMEUP",
             "KEY_VOLUMEDOWN",
@@ -40,9 +35,7 @@ final class VolumeInputDeviceParser {
             "KEY_FASTFORWARD",
             "KEY_MEDIA",
             "KEY_PHONE",
-            // Android's Generic.kl maps Linux KEY_SEND (231) to CALL and
-            // KEY_FORWARDMAIL (233) to HEADSETHOOK. They look unrelated by their Linux names,
-            // but failing to discover them can leave a call-control node outside EVIOCGRAB.
+            // Android Generic.kl maps these Linux names to CALL and HEADSETHOOK.
             "KEY_SEND",
             "KEY_FORWARDMAIL",
             "KEY_PICKUP_PHONE",
@@ -155,10 +148,6 @@ final class VolumeInputDeviceParser {
         return false;
     }
 
-    /**
-     * EVIOCGRAB owns an entire event node, not one key code. Refuse nodes that also behave like a
-     * typing keyboard so selecting a headset can never disable a user's external keyboard.
-     */
     private static boolean containsTypingKey(String upperLine) {
         String[] tokens = upperLine.split("[^A-Z0-9_]+");
         for (String token : tokens) {
@@ -174,11 +163,6 @@ final class VolumeInputDeviceParser {
         return false;
     }
 
-    /**
-     * Do not exclusively grab a node that also carries headset/jack insertion state. Suppressing
-     * those EV_SW events could interfere with Android's audio-route bookkeeping on analog or mixed
-     * devices. Such a node remains discoverable for diagnostics but is not safe to own exclusively.
-     */
     private static boolean containsRoutingSwitch(String upperLine) {
         return upperLine.contains("SW_HEADPHONE_INSERT")
                 || upperLine.contains("SW_MICROPHONE_INSERT")
@@ -241,7 +225,7 @@ final class VolumeInputDeviceParser {
     }
 
     static String encode(Device device) {
-        // Keep the v3 wire/storage format stable so existing selected-device preferences survive.
+        // Keep stored selections compatible with earlier 3.x releases.
         return sanitize(device.path) + "\t" + sanitize(device.name) + "\t"
                 + (device.likelyInternal ? "internal" : "external");
     }
@@ -255,8 +239,7 @@ final class VolumeInputDeviceParser {
             return null;
         }
         boolean likelyInternal = parts.length >= 3 && "internal".equals(parts[2]);
-        // Capability details are refreshed from getevent before an exclusive grab. Legacy encoded
-        // selections therefore remain valid without pretending their old cached capabilities matter.
+        // Capabilities are refreshed before any exclusive grab.
         return new Device(
                 parts[0], parts[1], true, true, false, true, likelyInternal, true, ""
         );
@@ -286,7 +269,6 @@ final class VolumeInputDeviceParser {
         final boolean exclusiveGrabSafe;
         final String unsafeGrabReason;
 
-        /** Backward-compatible constructor used by existing tests/helpers. */
         Device(
                 String path,
                 String name,

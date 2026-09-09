@@ -2,8 +2,13 @@ plugins {
     id 'com.android.application'
 }
 
-def ciVersionCode = (project.findProperty('versionCode') ?: '1').toInteger()
-def testKeyStore = file('debug.keystore')
+def buildVersionCode = (project.findProperty('versionCode') ?: project.property('appVersionCode')).toInteger()
+def releaseStorePath = System.getenv('BUTTON_SILENCER_KEYSTORE')
+def releaseStorePassword = System.getenv('BUTTON_SILENCER_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('BUTTON_SILENCER_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('BUTTON_SILENCER_KEY_PASSWORD')
+def hasReleaseSigning = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+        .every { it != null && !it.trim().isEmpty() }
 
 android {
     namespace 'com.buttons.silencer'
@@ -18,16 +23,18 @@ android {
         applicationId 'com.buttons.silencer'
         minSdk 26
         targetSdk 36
-        versionCode ciVersionCode
-        versionName "3.1.6.${ciVersionCode}"
+        versionCode buildVersionCode
+        versionName project.property('appVersion')
     }
 
     signingConfigs {
-        testKey {
-            storeFile testKeyStore
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
         }
     }
 
@@ -35,10 +42,11 @@ android {
         debug {
             applicationIdSuffix '.debug'
             versionNameSuffix '-debug'
-            signingConfig signingConfigs.testKey
         }
         release {
-            signingConfig signingConfigs.testKey
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

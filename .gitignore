@@ -8,5 +8,10 @@ local.properties
 .externalNativeBuild/
 .cxx/
 dist/
-
 .ci/
+
+*.jks
+*.keystore
+keystore.properties
+*.apk
+*.aab

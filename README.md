@@ -1,98 +1,78 @@
-# Button Silencer 3.1.2
+# Button Silencer
 
-A compact Android utility that blocks unwanted headset controls without claiming the USB audio interface or disabling the phone's own buttons.
+[![Android CI](https://github.com/EithonX/ButtonSilencer/actions/workflows/build-apk.yml/badge.svg)](https://github.com/EithonX/ButtonSilencer/actions/workflows/build-apk.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Developer:** [EithonX](https://github.com/EithonX/)
+Button Silencer blocks faulty headset and IEM remote buttons without disabling the phone's own physical buttons.
 
-## What this build does
+Some damaged or noisy inline remotes generate phantom volume, media, or headset-hook presses. Besides interrupting playback, those events can answer or end calls. Button Silencer filters them at two layers so protection can continue when the screen is off.
 
-- Blocks `HEADSETHOOK` and Android media keys through a privileged Shizuku media-key listener.
-- Neutralizes volume-up and volume-down only from the explicitly selected headset/IEM input device.
-- Leaves the phone's own physical volume buttons working.
-- Keeps privileged protection active with the display on or off while Shizuku is running.
-- Keeps the previous Accessibility key filter as an optional advanced fallback.
-- Uses no network permission, analytics, ads, account, foreground notification, wake lock, USB-interface claim, or persistent event log.
+## How it works
 
-## 3.1.2 build hardening
+- **Screen on:** an Accessibility service consumes the configured headset/media keys before applications receive them. Call-capable keys are always blocked while protection is enabled.
+- **Screen off:** a Shizuku UserService handles privileged input routing.
+- **Selected headset:** Button Silencer uses Linux `EVIOCGRAB` on the selected external headset's safe `/dev/input/event*` nodes. While the raw guard is active, those nodes are exclusively owned and their button events do not continue into Android's dialer, media, or volume handling.
 
-The GitHub Actions dependency-resolution failure in 3.1.1 was caused by pinning `androidx.annotation` to 1.9.1 while Shizuku 13.1.5 resolves that library at 1.3.0. This release follows Shizuku's own demo/provider setup and pins the app to `androidx.annotation:annotation:1.3.0` as an implementation dependency. The preflight rejects a different annotation version so this exact conflict cannot be reintroduced silently.
+The phone's own side-button input devices are excluded from headset selection.
 
-CI now runs only stable high-level Android tasks (`testDebugUnitTest`, both lint variants, and both APK assemblies), uses Gradle `--continue` to surface independent failures in one run, and stores the complete Gradle console log plus Android build reports on failure. The Android toolchain remains AGP 8.13.2 + Gradle 8.13 + JDK 17 + Build Tools 35.0.0 + compile/target SDK 36, matching the official AGP 8.13 compatibility matrix.
+> [!IMPORTANT]
+> Screen-off protection depends on Shizuku. If Shizuku stops or the selected-headset raw guard is recovering, Button Silencer cannot guarantee that screen-off headset events are blocked. The app reports partial protection rather than treating that state as fully protected.
 
-## 3.1.2 reliability changes
+## Requirements
 
-The Shizuku lifecycle is now self-healing instead of relying on the activity being reopened. This point release also fixes the Java definite-assignment bug exposed by GitHub Actions: the reconnect callback is now created only after the application context is assigned. The AndroidX annotation dependency is pinned to Shizuku’s own 1.3.0 version so the compile and runtime dependency graphs stay compatible.
+- Android 8.0 (API 26) or newer
+- [Shizuku](https://shizuku.rikka.app/) for screen-off protection
+- Accessibility permission for the screen-on filter
 
-- The app uses Shizuku's sticky binder listener and rebinds the daemon UserService when the Shizuku binder returns.
-- The app also links directly to the privileged UserService binder so a dead/restarted privileged process is detected even when Shizuku itself is still alive.
-- Rebind attempts use a capped backoff and only start after a real disconnect. A timed-out bind is explicitly detached before retrying so a stale app-side connection cannot wedge later recovery. There is no permanent keep-alive loop.
-- If the selected `/dev/input/event*` monitor disappears, the privileged service watches `/dev/input` for node changes and re-resolves the selected device by name. This handles USB reconnects and event-number churn without continuously rescanning.
-- A few short fallback retries cover transient races around detach/reattach; after those, the service goes fully idle until `/dev/input` changes.
+## Install
 
-Shizuku daemon UserServices are killed when the Shizuku service itself stops or restarts. Button Silencer therefore cannot protect headset buttons while Shizuku is actually offline, but it will reattach after Shizuku returns and permission is still granted.
+Download the signed APK from [GitHub Releases](https://github.com/EithonX/ButtonSilencer/releases/latest).
 
-## 3.1.2 interface redesign
+1. Install Button Silencer.
+2. Enable its Accessibility service.
+3. Start Shizuku and grant Button Silencer access.
+4. Turn on **Headset button protection**.
+5. Connect the affected headset or USB DAC.
+6. Tap **Scan headset** and choose the external device.
+7. Confirm that the app reports full protection before relying on screen-off call protection.
+8. Verify that the phone's own volume buttons still work.
 
-The main screen was recomposed around the actual job rather than a stack of equally weighted settings cards. One dominant protection surface answers whether blocking is working now, the selected headset is the only other primary task, and Advanced/About stay visually quiet until opened. Recovery text changes with the real failure state (reconnect Shizuku, request permission, or retry protection) instead of showing one generic action.
+After a reboot, Shizuku must be started again before the privileged screen-off path can return.
 
-The UI now uses purpose-built light/dark palettes, state-aware switch tints, rounded ripple controls, compact identity branding, subtle status surfaces, responsive tablet gutters, Android 15+ system-bar/cutout insets, and larger touch targets. Accessibility and App-info actions stack on compact widths so long labels do not get squeezed into two columns.
+## What it does not do
 
-## GitHub Actions hardening
+- No network permission, analytics, ads, or account system
+- No foreground service or wake lock
+- No USB interface claiming or control transfers
+- No key-layout or system-file modification
+- No persistent event-history database
 
-The workflow pins the Android/Java/Gradle setup actions and toolchain, retries SDK package installation, uses one deterministic Gradle invocation to compile both debug and release Java/resource variants, run unit tests plus debug/release lint, and assemble both APK variants, and verifies APK existence, 16 KiB-aware zip alignment, signatures, and SHA-256 checksums. Build reports are uploaded on failure so the next CI error has actionable artifacts instead of only a collapsed console trace.
+Diagnostic logging is off by default. When enabled, recent Accessibility events are kept only in the app process's in-memory ring buffer.
 
-## Efficiency design
+## Building
 
-The privileged input monitor runs raw `getevent -q` on one selected input node, avoiding label/timestamp formatting work. While no button is pressed, the process is blocked in the kernel rather than polling. The media-key listener, `/dev/input` observer, and volume callbacks are event-driven. There is no wake lock and the activity has no periodic refresh loop.
+The project uses JDK 17, Gradle 8.13, Android Gradle Plugin 8.13.2, and Android SDK 36.
 
-Repeated faulty headset-volume events are coalesced into one bounded three-step restore cycle, so a noisy inline remote cannot grow an unbounded Handler queue. Detailed event logging is disabled by default. When enabled from Advanced settings, Accessibility events are kept only in an in-memory ring buffer for the current process session.
+```bash
+gradle testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease
+```
 
-## Build with GitHub Actions
+The four small JNI libraries under `app/src/main/jniLibs/` implement the exclusive evdev grab. Verify them with:
 
-1. Create a repository and upload the contents of this folder, including `.github`.
-2. Open **Actions** → **Build APKs** → **Run workflow**.
-3. Download the `ButtonSilencer-apks` artifact.
+```bash
+bash scripts/verify-native-libs.sh
+```
 
-The artifact contains:
+To rebuild those libraries, install the Android NDK, set `ANDROID_NDK_HOME`, and run:
 
-- `ButtonSilencer-release.apk` — minified and resource-shrunk.
-- `ButtonSilencer-debug.apk` — diagnostic build with a separate `.debug` application ID.
-- `SHA256SUMS.txt`.
+```bash
+bash scripts/build-native.sh
+```
 
-Both APKs are signed with the included deterministic **test key** so later workflow builds can install over earlier builds without uninstalling. Replace the signing configuration before public distribution.
+Pull-request CI builds an ordinary debug APK and an **unsigned** release APK. Official release APKs are built from version tags and signed with the maintainer's private release key.
 
-## First setup
+## Contributing and security
 
-1. Install the release APK.
-2. Start Shizuku.
-3. Open Button Silencer and enable **Headset button protection**.
-4. Grant the Shizuku permission.
-5. Connect the USB DAC/IEM/headset.
-6. Tap **Scan headset** and choose the external headset entry.
-7. Lock the screen and test play/pause plus headset volume controls.
-8. Confirm the phone's own side-volume buttons still work.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes. Please report security-sensitive issues according to [SECURITY.md](SECURITY.md), not in a public issue.
 
-After a phone reboot, start Shizuku again. Button Silencer will reconnect when Shizuku delivers its binder.
-
-## Advanced settings
-
-Advanced settings allow the two privileged routes to be controlled separately, retain the optional Accessibility fallback rules, and expose manual diagnostics. The app deliberately refuses scan results that look like built-in `gpio-keys`, PMIC, keypad, power-key, or side-key devices.
-
-## Safety model
-
-The headset volume guard reads one `/dev/input/event*` node and restores `STREAM_MUSIC` after a volume press from that node. It does not use `EVIOCGRAB`, modify key-layout files, disable an input device, issue USB control transfers, or claim the USB audio interface. The phone-button device is not monitored.
-
-A brief Android volume-overlay flash may still occur because the volume guard neutralizes the change immediately after the kernel event rather than intercepting the system's volume path before it happens.
-
-## Toolchain
-
-- Android Gradle Plugin 8.13.2
-- Gradle 8.13
-- JDK 17
-- compile/target SDK 36
-- minimum SDK 26
-- Shizuku API/provider 13.1.5
-
-## License
-
-See [LICENSE](LICENSE).
+Button Silencer is maintained by [EithonX](https://github.com/EithonX/). Licensed under the [MIT License](LICENSE).

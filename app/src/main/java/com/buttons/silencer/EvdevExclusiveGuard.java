@@ -1,13 +1,6 @@
 package com.buttons.silencer;
 
-/**
- * Tiny JNI bridge for Linux EVIOCGRAB.
- *
- * <p>When a selected evdev node is grabbed, the kernel delivers its events only to Button
- * Silencer's file handle until the grab is released or the handle is closed. That is stronger
- * than observing the event after Android has already received it and is the screen-off safety
- * path for faulty headset remotes.</p>
- */
+/** JNI bridge for Linux EVIOCGRAB on the selected headset input node. */
 final class EvdevExclusiveGuard {
     private static final String LIBRARY_NAME = "buttonsilencer_evgrab";
     private static final boolean AVAILABLE;
@@ -19,9 +12,6 @@ final class EvdevExclusiveGuard {
         String error = "";
         try {
             System.loadLibrary(LIBRARY_NAME);
-            // Exercise symbol resolution immediately. EBADF is the expected response for fd=-1.
-            // This turns a missing/renamed JNI symbol into a recoverable "guard unavailable" state
-            // instead of crashing the privileged UserService on the first real headset grab.
             int probe = nativeSetGrab(-1, false);
             if (probe == 9) {
                 available = true;

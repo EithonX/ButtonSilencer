@@ -3,6 +3,7 @@ plugins {
 }
 
 def buildVersionCode = (project.findProperty('versionCode') ?: project.property('appVersionCode')).toInteger()
+def buildVersionName = project.findProperty('versionName') ?: project.property('appVersion')
 def releaseStorePath = System.getenv('BUTTON_SILENCER_KEYSTORE')
 def releaseStorePassword = System.getenv('BUTTON_SILENCER_STORE_PASSWORD')
 def releaseKeyAlias = System.getenv('BUTTON_SILENCER_KEY_ALIAS')
@@ -24,7 +25,7 @@ android {
         minSdk 26
         targetSdk 36
         versionCode buildVersionCode
-        versionName project.property('appVersion')
+        versionName buildVersionName
     }
 
     signingConfigs {

@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (for example 3.2.0-rc.1). Leave blank for appVersion.'
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -16,6 +21,7 @@ jobs:
     environment: release
     outputs:
       app_version: ${{ steps.version.outputs.app_version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
 
     steps:
       - name: Check out repository
@@ -26,16 +32,54 @@ jobs:
       - name: Resolve release version
         id: version
         shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          version="$(sed -n 's/^appVersion=//p' gradle.properties)"
-          test -n "$version"
+          base_version="$(sed -n 's/^appVersion=//p' gradle.properties)"
+          base_code="$(sed -n 's/^appVersionCode=//p' gradle.properties)"
+          test -n "$base_version"
+          [[ "$base_code" =~ ^[0-9]+$ ]]
+
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            test "$GITHUB_REF_NAME" = "v$version"
+            release_version="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${REQUESTED_VERSION:-}" ]]; then
+            release_version="$REQUESTED_VERSION"
+          else
+            release_version="$base_version"
           fi
-          grep -Fqx "## [$version]" CHANGELOG.md
-          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
-          echo "app_version=$version" >> "$GITHUB_OUTPUT"
+
+          if [[ "$release_version" == "$base_version" ]]; then
+            version_code="$base_code"
+            prerelease=false
+          elif [[ "$release_version" =~ ^${base_version//./\\.}-(alpha|beta|rc)\.([1-9][0-9]?)$ ]]; then
+            channel="${BASH_REMATCH[1]}"
+            sequence="${BASH_REMATCH[2]}"
+            case "$channel" in
+              alpha) offset=300 ;;
+              beta)  offset=200 ;;
+              rc)    offset=100 ;;
+            esac
+            version_code=$((base_code - offset + sequence))
+            prerelease=true
+          else
+            echo "Version must be $base_version or $base_version-{alpha,beta,rc}.N (N=1..99)." >&2
+            exit 1
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            test "$GITHUB_REF_NAME" = "v$release_version"
+          fi
+
+          if ! grep -Fqx "## [$release_version]" CHANGELOG.md; then
+            echo "CHANGELOG.md is missing: ## [$release_version]" >&2
+            exit 1
+          fi
+
+          echo "APP_VERSION=$release_version" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+          echo "app_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       - name: Verify native libraries
         run: bash scripts/verify-native-libs.sh
@@ -99,6 +143,8 @@ jobs:
         run: |
           set -euo pipefail
           gradle --no-daemon --stacktrace --console=plain \
+            -PversionName="$APP_VERSION" \
+            -PversionCode="$VERSION_CODE" \
             clean testDebugUnitTest lintRelease assembleRelease
 
       - name: Verify signed APK
@@ -157,11 +203,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           APP_VERSION: ${{ needs.build.outputs.app_version }}
+          IS_PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           set -euo pipefail
+          release_flags=(--verify-tag --title "$GITHUB_REF_NAME" --notes-file dist/RELEASE_NOTES.md)
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            release_flags+=(--prerelease --latest=false)
+          else
+            release_flags+=(--latest)
+          fi
+
           gh release create "$GITHUB_REF_NAME" \
             "dist/ButtonSilencer-$APP_VERSION.apk" \
             dist/SHA256SUMS.txt \
-            --verify-tag \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file dist/RELEASE_NOTES.md
+            "${release_flags[@]}"

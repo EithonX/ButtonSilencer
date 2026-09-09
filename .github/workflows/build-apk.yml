@@ -91,18 +91,22 @@ jobs:
 
           mkdir -p dist
           cp "$debug_apk" dist/ButtonSilencer-debug.apk
-          cp "$release_apk" dist/ButtonSilencer-release-unsigned.apk
 
-          for apk in dist/*.apk; do
-            "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
-          done
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 dist/ButtonSilencer-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose dist/ButtonSilencer-debug.apk
-          sha256sum dist/*.apk > dist/SHA256SUMS.txt
+          sha256sum dist/ButtonSilencer-debug.apk > dist/SHA256SUMS.txt
+
+          {
+            echo "### CI APK"
+            echo
+            echo "The uploaded APK is the installable debug build."
+            echo "For a production-signed APK from the current branch, run the Release workflow manually."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: ButtonSilencer-ci-${{ github.run_number }}
+          name: ButtonSilencer-debug-${{ github.run_number }}
           path: dist/
           if-no-files-found: error
           retention-days: 14

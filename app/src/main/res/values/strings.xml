@@ -6,6 +6,7 @@
     <string name="app_icon_description">Button Silencer app icon</string>
     <string name="status_dot">●</string>
     <string name="tagline">Silence headset controls. Keep the phone buttons yours.</string>
+    <string name="tagline_short">Headset controls, silenced.</string>
     <string name="version_format">v%1$s</string>
     <string name="runtime_status_format">Shizuku · %1$s</string>
 
@@ -15,12 +16,16 @@
     <string name="protection_active_media_only_detail">Media buttons are guarded. Select the headset input device to guard its volume buttons too.</string>
     <string name="protection_partial">Protection is recovering</string>
     <string name="protection_partial_detail">A requested route is not active yet. Automatic recovery is armed; reconnect Shizuku or rescan only if it stays here.</string>
+    <string name="protection_setup">Finishing protection setup</string>
+    <string name="protection_setup_detail">Connecting the privileged guard and finding the headset input. Nothing is shown as protected until both are ready.</string>
     <string name="protection_off">Protection off</string>
     <string name="protection_off_detail">No privileged headset buttons are being blocked.</string>
     <string name="shizuku_not_running">Shizuku is not running</string>
     <string name="shizuku_not_running_detail">Start Shizuku. Button Silencer will reconnect when its binder returns.</string>
+    <string name="shizuku_not_running_setup_detail">Start Shizuku to continue protection setup. Your protection switch will stay off until setup is complete.</string>
     <string name="permission_required">Shizuku permission required</string>
     <string name="permission_required_detail">Grant Button Silencer permission from the Shizuku prompt or app.</string>
+    <string name="permission_required_setup_detail">Grant Shizuku access to continue. Protection will turn on only after the headset route is ready.</string>
     <string name="connecting">Connecting privileged guard</string>
     <string name="connecting_detail">The screen-off protection service is being attached.</string>
     <string name="connect_shizuku">Reconnect Shizuku</string>
@@ -32,6 +37,7 @@
     <string name="no_headset_selected">No headset selected</string>
     <string name="scan_device_hint">Connect the USB DAC / IEM, then scan for its volume-key input node.</string>
     <string name="headset_device_explanation">Only the chosen external input node is monitored. The phone’s built-in side buttons remain outside this route.</string>
+    <string name="headset_device_explanation_short">Only this external input is monitored. Phone volume keys stay untouched.</string>
     <string name="scan_devices">Scan headset</string>
     <string name="scanning">Scanning…</string>
     <string name="forget_device">Forget</string>
@@ -62,6 +68,14 @@
     <string name="accessibility_all_volume">Block volume keys from every device</string>
     <string name="block_all_volume_warning">Caution: the last option can also disable the phone’s own volume buttons while Accessibility receives them.</string>
     <string name="open_accessibility">Accessibility settings</string>
+    <string name="enable_accessibility_service">Set up Accessibility service</string>
+    <string name="manage_accessibility">Manage Accessibility service</string>
+    <string name="accessibility_state_setup_required">Android’s Accessibility service is off. Set it up first; filtering controls stay locked until Android can actually run them.</string>
+    <string name="accessibility_state_active">Accessibility service is on and Button Silencer filtering is active.</string>
+    <string name="accessibility_state_paused">Accessibility service is on. Filtering is paused in Button Silencer.</string>
+    <string name="accessibility_ready">Accessibility filtering is ready</string>
+    <string name="accessibility_settings_unavailable">Accessibility settings are unavailable on this device.</string>
+    <string name="protection_setup_complete">Headset selected. Protection is turning on.</string>
     <string name="open_app_info">App info</string>
     <string name="service_enabled">Enabled</string>
     <string name="service_disabled">Disabled</string>

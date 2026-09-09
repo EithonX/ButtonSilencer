@@ -43,7 +43,7 @@ checks = {
     'CI captures full Gradle log': 'tee .ci/gradle.log' in workflow and '.ci/gradle.log' in workflow,
     'APK alignment verification': 'zipalign' in workflow and '-P 16 -v 4' in workflow,
     'APK signature verification': 'apksigner' in workflow,
-    '3.1.2 CI version base': '312000 + GITHUB_RUN_NUMBER' in workflow,
+    '3.1.3 CI version base': '313000 + GITHUB_RUN_NUMBER' in workflow,
 }
 for label, ok in checks.items():
     if not ok:

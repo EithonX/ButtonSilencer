@@ -18,9 +18,11 @@
     <color name="status_divider">#2EFFFFFF</color>
 
     <color name="status_active">#6BD7B1</color>
+    <color name="status_active_outline">#446BD7B1</color>
     <color name="status_active_surface">#143129</color>
     <color name="status_active_surface_end">#19251F</color>
     <color name="status_warning">#F0BD69</color>
+    <color name="status_warning_outline">#44F0BD69</color>
     <color name="status_warning_surface">#382811</color>
     <color name="status_warning_surface_end">#272016</color>
     <color name="status_inactive">#A2A9B5</color>

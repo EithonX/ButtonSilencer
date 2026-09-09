@@ -4,14 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Compact shield + headset mark, kept inside the adaptive-icon safe zone. -->
+    <!-- Product-specific mark: an inline headset remote with its physical buttons silenced. -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,18 L82,28 L82,50 C82,68 70,82 54,90 C38,82 26,68 26,50 L26,28 Z" />
+        android:pathData="M54,24 C62.3,24 69,30.7 69,39 L69,69 C69,77.3 62.3,84 54,84 C45.7,84 39,77.3 39,69 L39,39 C39,30.7 45.7,24 54,24 Z" />
     <path
-        android:fillColor="#171B3C"
-        android:pathData="M54,33 C43.5,33 35,41.5 35,52 L35,68 L44,68 L44,52 C44,46.5 48.5,42 54,42 C59.5,42 64,46.5 64,52 L64,68 L73,68 L73,52 C73,41.5 64.5,33 54,33 Z" />
+        android:fillColor="@color/icon_background"
+        android:pathData="M54,38 a3.8,3.8 0,1 0,0 7.6 a3.8,3.8 0,1 0,0 -7.6 M54,50.2 a3.8,3.8 0,1 0,0 7.6 a3.8,3.8 0,1 0,0 -7.6 M54,62.4 a3.8,3.8 0,1 0,0 7.6 a3.8,3.8 0,1 0,0 -7.6" />
     <path
-        android:fillColor="#AEB3FF"
-        android:pathData="M39,67 L69,37 L74,42 L44,72 Z" />
+        android:fillColor="@color/icon_tint"
+        android:pathData="M32,73 L37.5,78.5 L76,40 L70.5,34.5 Z" />
 </vector>

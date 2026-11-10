@@ -8,7 +8,7 @@ Requirements:
 
 - JDK 17
 - Android SDK 36
-- Build Tools 35.0.0
+- Build Tools 36.0.0
 
 Run the same checks as CI:
 

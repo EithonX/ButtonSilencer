@@ -52,7 +52,7 @@ Button Silencer has no network permission, analytics, ads, or account system. It
 
 ## Building
 
-The project uses JDK 17, Android SDK 36, Android Gradle Plugin 8.13.2, and Gradle 8.13.
+The project uses JDK 17, Android SDK 36, Android Gradle Plugin 9.5.0, and Gradle 9.8.2.
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug lintRelease assembleDebug assembleRelease

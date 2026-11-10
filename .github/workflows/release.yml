@@ -101,17 +101,15 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;35.0.0'; then
+            if sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'; then
               exit 0
             fi
             sleep $((attempt * 5))
           done
           exit 1
 
-      - name: Set up Gradle 8.13
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
-        with:
-          gradle-version: '8.13'
 
       - name: Prepare signing key
         shell: bash
@@ -142,7 +140,7 @@ jobs:
           BUTTON_SILENCER_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          gradle --no-daemon --stacktrace --console=plain \
+          ./gradlew --no-daemon --stacktrace --console=plain \
             -PversionName="$APP_VERSION" \
             -PversionCode="$VERSION_CODE" \
             clean testDebugUnitTest lintRelease assembleRelease
@@ -155,8 +153,8 @@ jobs:
           test -s "$apk"
           mkdir -p dist
           cp "$apk" "dist/ButtonSilencer-$APP_VERSION.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "dist/ButtonSilencer-$APP_VERSION.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify \
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "dist/ButtonSilencer-$APP_VERSION.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify \
             --verbose \
             --print-certs \
             "dist/ButtonSilencer-$APP_VERSION.apk" \
